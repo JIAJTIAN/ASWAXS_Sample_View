@@ -14,7 +14,7 @@ It is part of a three-component software stack:
 
 ## Overview
 
-ASWAXS_Collector provides a unified GUI for the beamline scientist to:
+ASWAXS_Sample_View provides a unified GUI for the beamline scientist to:
 
 - View the live sample camera and navigate to sample positions by double-clicking on the image
 - Control X, Y, and Z (focus) motors with real-time EPICS readbacks
@@ -135,7 +135,7 @@ Settings are stored in `sample_station_config.json` (auto-created on first run):
 ## File Structure
 
 ```
-ASWAXS_Collector/
+ASWAXS_Sample_View/
 ├── sample_station.py        # Main application (PyQt6)
 ├── sample_view.py           # Earlier single-window version (reference)
 ├── autofocus.py             # Autofocus helper script
