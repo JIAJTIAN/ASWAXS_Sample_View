@@ -8,7 +8,6 @@ It is part of a three-component software stack:
 |---|---|
 | **ASWAXS_Sample_View** (this repo) | Sample positioning, camera viewing, motor control, position list management |
 | [FrameByFrame](https://github.com/JIAJTIAN/FrameByFrame) | Live data reduction and visualization pipeline |
-| [ASWAXS_Sample_Position_App](https://github.com/JIAJTIAN/ASWAXS_Sample_Position_App) | Legacy standalone position planning tool |
 
 ---
 
