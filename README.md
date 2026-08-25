@@ -1,12 +1,12 @@
-# ASWAXS_Collector
+# ASWAXS_Sample_View
 
-**ASWAXS_Collector** is the beamline data-collection front-end for the ASWAXS (Anomalous Small- and Wide-Angle X-ray Scattering) instrument at the Advanced Photon Source (APS), Argonne National Laboratory.
+**ASWAXS_Sample_View** is the beamline data-collection front-end for the ASWAXS (Anomalous Small- and Wide-Angle X-ray Scattering) instrument at the Advanced Photon Source (APS), Argonne National Laboratory.
 
 It is part of a three-component software stack:
 
 | Component | Role |
 |---|---|
-| **ASWAXS_Collector** (this repo) | Sample positioning, camera viewing, motor control, position list management |
+| **ASWAXS_Sample_View** (this repo) | Sample positioning, camera viewing, motor control, position list management |
 | [FrameByFrame](https://github.com/JIAJTIAN/FrameByFrame) | Live data reduction and visualization pipeline |
 | [ASWAXS_Sample_Position_App](https://github.com/JIAJTIAN/ASWAXS_Sample_Position_App) | Legacy standalone position planning tool |
 
