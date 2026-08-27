@@ -24,3 +24,16 @@ sample_station_config.json
 # OS
 .DS_Store
 Thumbs.db
+
+# Secrets / keys — never commit these
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+id_ecdsa
+*.env
+.env*
+secrets.json
+credentials.json
