@@ -425,6 +425,10 @@ class SampleStation(QMainWindow):
         self.roi_lock_btn.setCheckable(True)
         self.roi_lock_btn.setFixedWidth(85)
         roi_bar.addWidget(self.roi_lock_btn)
+        self.roi_center_btn = QPushButton("Center ROI")
+        self.roi_center_btn.setFixedWidth(90)
+        self.roi_center_btn.setToolTip("Move ROI to image center")
+        roi_bar.addWidget(self.roi_center_btn)
         roi_bar.addStretch()
         v.addLayout(roi_bar)
 
@@ -756,6 +760,23 @@ class SampleStation(QMainWindow):
         self.roi_y_spin.setEnabled(not locked)
         self.roi_size_spin.setEnabled(not locked)
 
+    @pyqtSlot()
+    def _on_roi_center(self):
+        """Slot: Center ROI button — move ROI so its center coincides with image center."""
+        if self.roi_lock_btn.isChecked():
+            return
+        s = self._roi_vals['SizeX']  # current square size
+        # compute MinX/MinY so ROI center = image center
+        new_x = max(0, self.image_cx - s // 2)
+        new_y = max(0, self.image_cy - s // 2)
+        self._roi_vals.update({'MinX': new_x, 'MinY': new_y, 'SizeX': s, 'SizeY': s})
+        self._update_roi_rect()
+        if EPICS_AVAILABLE:
+            roi_prefix = self.cfg.get("ROI_PREFIX", "").strip()
+            if roi_prefix:
+                epics.caput(roi_prefix + 'MinX',  new_x)
+                epics.caput(roi_prefix + 'MinY',  new_y)
+
     @pyqtSlot(object)
     def _on_roi_dragged(self, _roi):
         """Slot: user finished dragging/resizing the ROI — write back to EPICS."""
@@ -818,6 +839,7 @@ class SampleStation(QMainWindow):
         self.roi_y_spin.editingFinished.connect(self._on_roi_spin_changed)
         self.roi_size_spin.editingFinished.connect(self._on_roi_spin_changed)
         self.roi_lock_btn.toggled.connect(self._on_roi_lock_toggled)
+        self.roi_center_btn.clicked.connect(self._on_roi_center)
 
     # ── Camera controls ────────────────────────────────────────────────────
 
