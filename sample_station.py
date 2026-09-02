@@ -861,8 +861,11 @@ class SampleStation(QMainWindow):
 
         if event._double and self.click_move_cb.isChecked():
             if 0 <= x < self.image_width and 0 <= y < self.image_height:
-                new_x = self.x_motor.get_sp() + self.cf * (x - self.image_cx)
-                new_y = self.y_motor.get_sp() + self.cf * (y - self.image_cy)
+                v = self._roi_vals
+                ref_x = v['MinX'] + v['SizeX'] / 2
+                ref_y = v['MinY'] + v['SizeY'] / 2
+                new_x = self.x_motor.get_sp() + self.cf * (x - ref_x)
+                new_y = self.y_motor.get_sp() + self.cf * (y - ref_y)
                 self.x_motor.move_to(new_x)
                 self.y_motor.move_to(new_y)
                 if self.auto_add_cb.isChecked():
