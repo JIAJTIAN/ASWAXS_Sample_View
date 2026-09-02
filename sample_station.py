@@ -861,9 +861,11 @@ class SampleStation(QMainWindow):
 
         if event._double and self.click_move_cb.isChecked():
             if 0 <= x < self.image_width and 0 <= y < self.image_height:
+                # ROI center = beam position on the detector (top-left corner + half size)
                 v = self._roi_vals
-                ref_x = v['MinX'] + v['SizeX'] / 2
-                ref_y = v['MinY'] + v['SizeY'] / 2
+                ref_x = v['MinX'] + v['SizeX'] / 2  # beam pixel X
+                ref_y = v['MinY'] + v['SizeY'] / 2  # beam pixel Y
+                # move motor by cf*(click - beam) so the clicked point aligns with the beam
                 new_x = self.x_motor.get_sp() + self.cf * (x - ref_x)
                 new_y = self.y_motor.get_sp() + self.cf * (y - ref_y)
                 self.x_motor.move_to(new_x)
