@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QCheckBox, QFileDialog, QMessageBox, QSplitter, QAbstractItemView,
     QDialog, QDialogButtonBox, QFrame, QTableWidget, QTableWidgetItem,
-    QComboBox, QSpinBox, QDoubleSpinBox, QFormLayout,
+    QComboBox, QSpinBox, QDoubleSpinBox, QFormLayout, QMenu,
 )
 from PyQt6.QtCore import (
     Qt, pyqtSignal, QEvent, QItemSelectionModel, QThread,
@@ -187,11 +187,14 @@ class SamplePositionTab(QWidget):
         self.table.model().rowsMoved.connect(self._on_rows_moved)
         self.table.itemChanged.connect(self._item_changed)
         self.table.selectionModel().selectionChanged.connect(self._selection_changed)
+        self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.table.customContextMenuRequested.connect(self._table_context_menu)
         splitter.addWidget(self.table)
 
         self.map_widget = PositionMapWidget()
         self.map_widget.pointSelected.connect(self._select_row)
         self.map_widget.pointAddRequested.connect(self._add_from_map)
+        self.map_widget.moveRequested.connect(self._move_to_position)
         splitter.addWidget(self.map_widget)
 
         splitter.setStretchFactor(0, 1)
@@ -400,6 +403,27 @@ class SamplePositionTab(QWidget):
         ).to_dict())
         self.set_positions(self._positions)
         self._select_row(idx)
+
+    def _move_to_position(self, row: int):
+        """Move X/Y motors to the position at the given row index."""
+        if self._station is None:
+            QMessageBox.warning(self, "No Station", "Not connected to station.")
+            return
+        if row < 0 or row >= len(self._positions):
+            return
+        pos = self._positions[row]
+        self._station.x_motor.move_to(float(pos.get("x", 0)))
+        self._station.y_motor.move_to(float(pos.get("y", 0)))
+
+    def _table_context_menu(self, point):
+        """Right-click context menu on the position table."""
+        row = self.table.rowAt(point.y())
+        if row < 0:
+            return
+        menu = QMenu(self)
+        act_move = menu.addAction("Move to Position")
+        if menu.exec(self.table.viewport().mapToGlobal(point)) == act_move:
+            self._move_to_position(row)
 
     def _delete_selected(self):
         rows = sorted(self._selected_rows(), reverse=True)

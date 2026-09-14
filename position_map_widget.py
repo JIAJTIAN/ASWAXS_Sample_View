@@ -4,7 +4,7 @@
 
 import pyqtgraph as pg
 
-from PyQt6.QtWidgets import QWidget, QVBoxLayout
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QMenu
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor
 
@@ -14,6 +14,7 @@ from position_models import ROLE_COLORS
 class PositionMapWidget(QWidget):
     pointSelected      = pyqtSignal(int)
     pointAddRequested  = pyqtSignal(float, float)
+    moveRequested      = pyqtSignal(int)   # emitted on right-click → Move to Position
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -123,11 +124,20 @@ class PositionMapWidget(QWidget):
         self._draw_selection()
         self.plot.autoRange(padding=0.15)
 
-    def _scatter_clicked(self, _scatter, points):
-        if points:
-            idx = points[0].data()
-            if idx is not None:
-                self.pointSelected.emit(int(idx))
+    def _scatter_clicked(self, _scatter, points, ev=None):
+        if not points:
+            return
+        idx = points[0].data()
+        if idx is None:
+            return
+        # right-click → context menu with Move to Position
+        if ev is not None and ev.button() == Qt.MouseButton.RightButton:
+            menu = QMenu()
+            act = menu.addAction("Move to Position")
+            if menu.exec(ev.screenPos().toPoint()) == act:
+                self.moveRequested.emit(int(idx))
+        else:
+            self.pointSelected.emit(int(idx))
 
     def _plot_clicked(self, event):
         if not self._add_points_enabled:
