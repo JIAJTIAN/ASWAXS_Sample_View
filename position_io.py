@@ -77,6 +77,14 @@ def _load_csv(path) -> list:
             parts = _split_row(stripped)
             if not parts:
                 continue
+            # detect a header row written without '#' (e.g. by _save_csv / DictWriter)
+            if header is None:
+                canonical = [_canonical_field(p) for p in parts]
+                if "x" in canonical and "y" in canonical:
+                    header = canonical
+                    default_layout = _layout_from_header(parts)
+                    default_role   = _role_from_header(parts)
+                    continue
             if header:
                 row = {header[i]: parts[i] for i in range(min(len(header), len(parts)))}
             else:
