@@ -371,7 +371,7 @@ class SamplePositionTab(QWidget):
                 # Handle row reorder ourselves — Qt's InternalMove corrupts cell data.
                 # Return True to consume the event so Qt never touches the model.
                 src = self.table.currentRow()
-                dst = self.table.rowAt(event.pos().y())
+                dst = self.table.rowAt(int(event.position().y()))
                 if dst < 0:
                     dst = len(self._positions) - 1
                 if src >= 0 and src != dst and src < len(self._positions):
