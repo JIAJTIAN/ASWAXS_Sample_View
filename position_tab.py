@@ -3,16 +3,18 @@
 # External deps: none (Blender SSH fired via _BlenderWorker; station motor RBV read via station ref).
 
 import os
+import copy
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QCheckBox, QFileDialog, QMessageBox, QSplitter, QAbstractItemView,
     QDialog, QDialogButtonBox, QFrame, QTableWidget, QTableWidgetItem,
-    QComboBox, QSpinBox, QDoubleSpinBox, QFormLayout, QMenu,
+    QComboBox, QSpinBox, QDoubleSpinBox, QFormLayout, QMenu, QShortcut,
 )
 from PyQt6.QtCore import (
     Qt, pyqtSignal, QEvent, QItemSelectionModel, QThread,
 )
+from PyQt6.QtGui import QKeySequence
 
 from position_models import POSITION_FIELDS, NUMERIC_FIELDS, ROLE_PRESETS, PositionRecord
 from position_io import (
@@ -42,8 +44,43 @@ class SamplePositionTab(QWidget):
         self._updating         = False
         self._current_path     = None
         self._pending_role_rows: list[int] = []
+        self._undo_stack: list  = []   # snapshots of _positions before each mutation
+        self._redo_stack: list  = []
         self._build_ui()
+        self._setup_undo_shortcuts()
         self.set_positions([])  # start empty; use Templates menu or Capture to add positions
+
+    # ── Undo / Redo ────────────────────────────────────────────────────────
+
+    _MAX_UNDO = 50
+
+    def _push_undo(self):
+        """Save current positions to undo stack before a mutation. Clears redo stack."""
+        snapshot = copy.deepcopy(self._positions)
+        # skip if nothing changed since last snapshot
+        if self._undo_stack and self._undo_stack[-1] == snapshot:
+            return
+        self._undo_stack.append(snapshot)
+        if len(self._undo_stack) > self._MAX_UNDO:
+            self._undo_stack.pop(0)
+        self._redo_stack.clear()
+
+    def undo(self):
+        if not self._undo_stack:
+            return
+        self._redo_stack.append(copy.deepcopy(self._positions))
+        self.set_positions(self._undo_stack.pop())
+
+    def redo(self):
+        if not self._redo_stack:
+            return
+        self._undo_stack.append(copy.deepcopy(self._positions))
+        self.set_positions(self._redo_stack.pop())
+
+    def _setup_undo_shortcuts(self):
+        QShortcut(QKeySequence("Ctrl+Z"), self).activated.connect(self.undo)
+        QShortcut(QKeySequence("Ctrl+Y"), self).activated.connect(self.redo)
+        QShortcut(QKeySequence("Ctrl+Shift+Z"), self).activated.connect(self.redo)
 
     # ── UI construction ────────────────────────────────────────────────────
 
@@ -339,6 +376,7 @@ class SamplePositionTab(QWidget):
         val   = item.text()
         if field in NUMERIC_FIELDS:
             val = _flt(val)
+        self._push_undo()
         self._positions[row][field] = val
         self._commit(selected_row=row)
 
@@ -346,6 +384,7 @@ class SamplePositionTab(QWidget):
         if self._updating:
             return
         rows_to_update = self._pending_role_rows if self._pending_role_rows else [row]
+        self._push_undo()
         for r in rows_to_update:
             if r < len(self._positions):
                 self._positions[r]["role"] = value
@@ -375,6 +414,7 @@ class SamplePositionTab(QWidget):
     def _assign_role(self):
         role = self.bulk_role_combo.currentText()
         rows = self._selected_rows()
+        self._push_undo()
         for r in rows:
             self._positions[r]["role"] = role
         saved = rows[:]
@@ -385,6 +425,7 @@ class SamplePositionTab(QWidget):
     # ── Row operations ─────────────────────────────────────────────────────
 
     def _add_row(self):
+        self._push_undo()
         rows = self._selected_rows()
         idx  = rows[-1] + 1 if rows else len(self._positions)
         self._positions.insert(idx, blank_position(idx))
@@ -394,6 +435,7 @@ class SamplePositionTab(QWidget):
         self._select_row(idx)
 
     def _add_from_map(self, x: float, y: float):
+        self._push_undo()
         rows = self._selected_rows()
         z    = float(self._positions[rows[0]].get("z", 0)) if rows else 0.0
         idx  = len(self._positions)
@@ -426,6 +468,7 @@ class SamplePositionTab(QWidget):
             self._move_to_position(row)
 
     def _delete_selected(self):
+        self._push_undo()
         rows = sorted(self._selected_rows(), reverse=True)
         for r in rows:
             if 0 <= r < len(self._positions):
@@ -433,6 +476,7 @@ class SamplePositionTab(QWidget):
         self.set_positions(self._positions)
 
     def _duplicate_selected(self):
+        self._push_undo()
         rows = self._selected_rows()
         if not rows:
             return
@@ -444,6 +488,7 @@ class SamplePositionTab(QWidget):
         self._select_row(r + 1)
 
     def _move_selected(self, delta: int):
+        self._push_undo()
         rows = self._selected_rows()
         if not rows:
             return
@@ -457,6 +502,7 @@ class SamplePositionTab(QWidget):
     def _on_rows_moved(self, _src_parent, src_start: int, src_end: int,
                        _dst_parent, dst_row: int):
         """Sync self._positions after a drag-and-drop row reorder."""
+        self._push_undo()
         moved = [self._positions.pop(src_start) for _ in range(src_end - src_start + 1)]
         insert_at = dst_row if dst_row <= src_start else dst_row - (src_end - src_start + 1)
         for i, p in enumerate(moved):
