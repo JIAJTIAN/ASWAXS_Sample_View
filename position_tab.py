@@ -9,12 +9,12 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QCheckBox, QFileDialog, QMessageBox, QSplitter, QAbstractItemView,
     QDialog, QDialogButtonBox, QFrame, QTableWidget, QTableWidgetItem,
-    QComboBox, QSpinBox, QDoubleSpinBox, QFormLayout, QMenu, QShortcut,
+    QComboBox, QSpinBox, QDoubleSpinBox, QFormLayout, QMenu,
 )
 from PyQt6.QtCore import (
     Qt, pyqtSignal, QEvent, QItemSelectionModel, QThread,
 )
-from PyQt6.QtGui import QKeySequence
+from PyQt6.QtGui import QKeySequence, QShortcut
 
 from position_models import POSITION_FIELDS, NUMERIC_FIELDS, ROLE_PRESETS, PositionRecord
 from position_io import (
