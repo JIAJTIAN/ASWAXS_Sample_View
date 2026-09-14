@@ -891,9 +891,9 @@ class SampleStation(QMainWindow):
                 v = self._roi_vals
                 ref_x = v['MinX'] + v['SizeX'] / 2  # beam pixel X
                 ref_y = v['MinY'] + v['SizeY'] / 2  # beam pixel Y
-                # move motor by cf*(click - beam) so the clicked point aligns with the beam
-                new_x = self.x_motor.get_sp() + self.cf * (x - ref_x)
-                new_y = self.y_motor.get_sp() + self.cf * (y - ref_y)
+                # use RBV (actual position) not SP (commanded) to avoid following-error accumulation
+                new_x = self.x_motor.get_rbv() + self.cf * (x - ref_x)
+                new_y = self.y_motor.get_rbv() + self.cf * (y - ref_y)
                 self.x_motor.move_to(new_x)
                 self.y_motor.move_to(new_y)
                 if self.auto_add_cb.isChecked():
