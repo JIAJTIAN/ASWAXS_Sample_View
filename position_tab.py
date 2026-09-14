@@ -222,6 +222,7 @@ class SamplePositionTab(QWidget):
         self.table.setDropIndicatorShown(True)
         self.table.setDragDropOverwriteMode(False)
         self.table.model().rowsMoved.connect(self._on_rows_moved)
+        self.table.viewport().installEventFilter(self)  # catch Drop to guard _item_changed
         self.table.itemChanged.connect(self._item_changed)
         self.table.selectionModel().selectionChanged.connect(self._selection_changed)
         self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -274,11 +275,14 @@ class SamplePositionTab(QWidget):
         except (ValueError, AttributeError):
             QMessageBox.warning(self, "No Readback", "Motor RBV not available.")
             return
-        idx = len(self._positions)
-        self._positions.append(PositionRecord(
+        self._push_undo()
+        rows = self._selected_rows()
+        idx  = rows[-1] + 1 if rows else len(self._positions)
+        self._positions.insert(idx, PositionRecord(
             name=f"pos_{idx+1}", x=x, y=y, z=z,
             role="Sample", layout="freeform",
         ).to_dict())
+        self._positions = normalize_positions(self._positions)
         self.set_positions(self._positions)
         self._select_row(idx)
 
@@ -363,6 +367,10 @@ class SamplePositionTab(QWidget):
                     return True
             if event.type() in (QEvent.Type.FocusIn, QEvent.Type.MouseButtonPress):
                 self._pending_role_rows = self._selected_rows()
+        if watched is self.table.viewport():
+            # set _updating before Qt fires itemChanged for the dragged empty cells
+            if event.type() == QEvent.Type.Drop:
+                self._updating = True
         return super().eventFilter(watched, event)
 
     def _item_changed(self, item):
@@ -507,6 +515,7 @@ class SamplePositionTab(QWidget):
         insert_at = dst_row if dst_row <= src_start else dst_row - (src_end - src_start + 1)
         for i, p in enumerate(moved):
             self._positions.insert(insert_at + i, p)
+        self._refresh_table()   # rebuilds cells from _positions and resets _updating
         self.map_widget.set_positions(self._positions)
         self.positionsChanged.emit(self.positions())
 
