@@ -221,8 +221,7 @@ class SamplePositionTab(QWidget):
         self.table.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
         self.table.setDropIndicatorShown(True)
         self.table.setDragDropOverwriteMode(False)
-        self.table.model().rowsMoved.connect(self._on_rows_moved)
-        self.table.viewport().installEventFilter(self)  # catch Drop to guard _item_changed
+        self.table.viewport().installEventFilter(self)  # handles Drop for row reorder
         self.table.itemChanged.connect(self._item_changed)
         self.table.selectionModel().selectionChanged.connect(self._selection_changed)
         self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -368,9 +367,22 @@ class SamplePositionTab(QWidget):
             if event.type() in (QEvent.Type.FocusIn, QEvent.Type.MouseButtonPress):
                 self._pending_role_rows = self._selected_rows()
         if watched is self.table.viewport():
-            # set _updating before Qt fires itemChanged for the dragged empty cells
             if event.type() == QEvent.Type.Drop:
-                self._updating = True
+                # Handle row reorder ourselves — Qt's InternalMove corrupts cell data.
+                # Return True to consume the event so Qt never touches the model.
+                src = self.table.currentRow()
+                dst = self.table.rowAt(event.pos().y())
+                if dst < 0:
+                    dst = len(self._positions) - 1
+                if src >= 0 and src != dst and src < len(self._positions):
+                    self._push_undo()
+                    item = self._positions.pop(src)
+                    self._positions.insert(dst, item)
+                    self._refresh_table()
+                    self._select_row(dst)
+                    self.map_widget.set_positions(self._positions)
+                    self.positionsChanged.emit(self.positions())
+                return True  # consume — do NOT let Qt process this drop
         return super().eventFilter(watched, event)
 
     def _item_changed(self, item):
