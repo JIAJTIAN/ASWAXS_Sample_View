@@ -368,6 +368,9 @@ class SampleStation(QMainWindow):
         toolbar.addWidget(self.click_move_cb)
         self.auto_add_cb = QCheckBox("Auto Add2List")
         toolbar.addWidget(self.auto_add_cb)
+        self.add_pos_btn = QPushButton("Add Position")
+        self.add_pos_btn.setToolTip("Add current motor position to the list")
+        toolbar.addWidget(self.add_pos_btn)
 
         sep1 = QFrame()
         sep1.setFrameShape(QFrame.Shape.VLine)
@@ -473,6 +476,7 @@ class SampleStation(QMainWindow):
 
         # Camera tab
         self.cf_edit.returnPressed.connect(self.cfChanged)
+        self.add_pos_btn.clicked.connect(self.addPosition)
         self.calibrate_btn.clicked.connect(self.openCalibration)
         self.autofocus_btn.clicked.connect(self._run_autofocus)
         self.af_cancel_btn.clicked.connect(self._cancel_autofocus)
