@@ -46,6 +46,7 @@ class SamplePositionTab(QWidget):
         self._pending_role_rows: list[int] = []
         self._undo_stack: list  = []   # snapshots of _positions before each mutation
         self._redo_stack: list  = []
+        self._drag_source_row: int = -1  # row captured on mouse-press for manual drag
         self._build_ui()
         self._setup_undo_shortcuts()
         self.set_positions([])  # start empty; use Templates menu or Capture to add positions
@@ -221,7 +222,7 @@ class SamplePositionTab(QWidget):
         self.table.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
         self.table.setDropIndicatorShown(True)
         self.table.setDragDropOverwriteMode(False)
-        self.table.viewport().installEventFilter(self)  # handles Drop for row reorder
+        self.table.viewport().installEventFilter(self)  # captures source row + handles Drop
         self.table.itemChanged.connect(self._item_changed)
         self.table.selectionModel().selectionChanged.connect(self._selection_changed)
         self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -367,10 +368,14 @@ class SamplePositionTab(QWidget):
             if event.type() in (QEvent.Type.FocusIn, QEvent.Type.MouseButtonPress):
                 self._pending_role_rows = self._selected_rows()
         if watched is self.table.viewport():
-            if event.type() == QEvent.Type.Drop:
+            if event.type() == QEvent.Type.MouseButtonPress:
+                # capture source row before drag starts (currentRow() is unreliable at Drop time)
+                idx = self.table.indexAt(event.pos())
+                self._drag_source_row = idx.row() if idx.isValid() else -1
+            elif event.type() == QEvent.Type.Drop:
                 # Handle row reorder ourselves — Qt's InternalMove corrupts cell data.
                 # Return True to consume the event so Qt never touches the model.
-                src = self.table.currentRow()
+                src = self._drag_source_row
                 dst = self.table.rowAt(int(event.position().y()))
                 if dst < 0:
                     dst = len(self._positions) - 1
@@ -382,6 +387,7 @@ class SamplePositionTab(QWidget):
                     self._select_row(dst)
                     self.map_widget.set_positions(self._positions)
                     self.positionsChanged.emit(self.positions())
+                self._drag_source_row = -1
                 return True  # consume — do NOT let Qt process this drop
         return super().eventFilter(watched, event)
 
