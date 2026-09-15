@@ -98,13 +98,17 @@ def _load_csv(path) -> list:
     return normalize_positions(result)
 
 
-def _save_csv(path, positions) -> None:
+def _save_csv(path, positions, axis_names: dict | None = None) -> None:
+    """axis_names maps internal key → display name, e.g. {"x": "s_x", "y": "s_y", "z": "s_z"}."""
     positions = normalize_positions(positions)
+    names = axis_names or {}
+    # build fieldnames with display names substituted for x/y/z
+    fieldnames = [names.get(f, f) for f in POSITION_FIELDS]
     with open(path, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=POSITION_FIELDS)
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         for pos in positions:
-            writer.writerow(pos)
+            writer.writerow({names.get(k, k): v for k, v in pos.items()})
 
 
 def _load_json(path) -> list:
@@ -172,7 +176,7 @@ def load_positions(path) -> list:
         return _load_csv(path)
 
 
-def save_positions(path, positions: list) -> None:
+def save_positions(path, positions: list, axis_names: dict | None = None) -> None:
     path = str(path)
     suffix = os.path.splitext(path)[1].lower()
     if suffix == '.json':
@@ -180,7 +184,7 @@ def save_positions(path, positions: list) -> None:
     elif suffix == '.pos':
         _save_pos(path, positions)
     else:
-        _save_csv(path, positions)
+        _save_csv(path, positions, axis_names=axis_names)
 
 
 def export_bluesky_csv(path, positions: list) -> None:

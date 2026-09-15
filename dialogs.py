@@ -67,6 +67,9 @@ class SetupDialog(QDialog):
             ("X_MOTOR_PV",      "X Motor PV:"),
             ("Y_MOTOR_PV",      "Y Motor PV:"),
             ("Z_MOTOR_PV",      "Z Motor PV:"),
+            ("X_MOTOR_NAME",    "X Axis Name:"),
+            ("Y_MOTOR_NAME",    "Y Axis Name:"),
+            ("Z_MOTOR_NAME",    "Z Axis Name:"),
         ]),
         ("camera", "Camera", [
             ("CAMERA_PREFIX",    "Camera Prefix:"),

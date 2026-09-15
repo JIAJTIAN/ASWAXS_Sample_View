@@ -47,6 +47,7 @@ class SamplePositionTab(QWidget):
         self._undo_stack: list  = []   # snapshots of _positions before each mutation
         self._redo_stack: list  = []
         self._drag_source_row: int = -1  # row captured on mouse-press for manual drag
+        self._axis_names: dict = {"x": "x", "y": "y", "z": "z"}  # display names for x/y/z cols
         self._build_ui()
         self._setup_undo_shortcuts()
         self.set_positions([])  # start empty; use Templates menu or Capture to add positions
@@ -241,6 +242,12 @@ class SamplePositionTab(QWidget):
 
     # ── Public API ─────────────────────────────────────────────────────────
 
+    def set_axis_names(self, x_name: str, y_name: str, z_name: str):
+        """Update display names for x/y/z columns (e.g. 's_x', 's_y', 's_z')."""
+        self._axis_names = {"x": x_name, "y": y_name, "z": z_name}
+        labels = [self._axis_names.get(f, f) for f in POSITION_FIELDS]
+        self.table.setHorizontalHeaderLabels(labels)
+
     def positions(self) -> list:
         return normalize_positions(self._positions)
 
@@ -259,7 +266,7 @@ class SamplePositionTab(QWidget):
 
     def save_positions(self, path):
         from pathlib import Path
-        save_positions(path, self.positions())
+        save_positions(path, self.positions(), axis_names=self._axis_names)
         self._current_path = Path(path)
 
     # ── Capture from stage ─────────────────────────────────────────────────

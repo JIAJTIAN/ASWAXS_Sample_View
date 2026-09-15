@@ -500,6 +500,11 @@ class SampleStation(QMainWindow):
         self.x_motor.connect(self.cfg["X_MOTOR_PV"])
         self.y_motor.connect(self.cfg["Y_MOTOR_PV"])
         self.z_motor.connect(self.cfg["Z_MOTOR_PV"])
+        self.pos_tab.set_axis_names(
+            self.cfg.get("X_MOTOR_NAME", "s_x"),
+            self.cfg.get("Y_MOTOR_NAME", "s_y"),
+            self.cfg.get("Z_MOTOR_NAME", "s_z"),
+        )
 
     def _apply_camera_config(self):
         # Stop any pending connection timeout
