@@ -1,6 +1,6 @@
-# position_tab.py — SamplePositionTab widget: position table, map, file I/O, and Blender launcher.
+# position_tab.py — SamplePositionTab widget: position table, map, file I/O, and path interpolation.
 # Debug entry point: check _refresh_table() combo signal wiring and _on_rows_moved() insert_at math.
-# External deps: none (Blender SSH fired via _BlenderWorker; station motor RBV read via station ref).
+# External deps: none (spline_interpolator; station motor RBV read via station ref).
 
 import os
 import copy
@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
     QComboBox, QSpinBox, QDoubleSpinBox, QFormLayout, QMenu,
 )
 from PyQt6.QtCore import (
-    Qt, pyqtSignal, QEvent, QItemSelectionModel, QThread,
+    Qt, pyqtSignal, QEvent, QItemSelectionModel,
 )
 from PyQt6.QtGui import QKeySequence, QShortcut
 
@@ -23,13 +23,7 @@ from position_io import (
 )
 from position_map_widget import PositionMapWidget
 from position_rack_builder import RackBuilderDialog
-from blender_worker import _BlenderWorker
-
-try:
-    import paramiko
-    PARAMIKO_AVAILABLE = True
-except ImportError:
-    PARAMIKO_AVAILABLE = False
+from spline_interpolator import catmull_rom_resample
 
 _DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -133,7 +127,7 @@ class SamplePositionTab(QWidget):
 
         top.addWidget(QLabel("Template:"))
         self.template_combo = QComboBox()
-        self.template_combo.addItems(["Freeform", "Capillary Linear", "Rack Builder", "Chip"])
+        self.template_combo.addItems(["Freeform", "Capillary Linear", "Rack Builder", "Chip", "Grid Scan"])
         top.addWidget(self.template_combo)
 
         apply_tmpl_btn = QPushButton("Apply")
@@ -195,15 +189,15 @@ class SamplePositionTab(QWidget):
         sep3 = QFrame(); sep3.setFrameShape(QFrame.Shape.VLine)
         sep3.setObjectName("toolSep"); row_bar.addWidget(sep3)
 
-        row_bar.addWidget(QLabel("Blender spacing (mm):"))
+        row_bar.addWidget(QLabel("Spacing (mm):"))
         self.interp_edit = QLineEdit("1.0")
         self.interp_edit.setFixedWidth(55)
         row_bar.addWidget(self.interp_edit)
 
-        self.blender_btn = QPushButton("⚙ Run Blender")
-        self.blender_btn.setObjectName("actionBtn")
-        self.blender_btn.clicked.connect(self._run_blender)
-        row_bar.addWidget(self.blender_btn)
+        self.interp_btn = QPushButton("⚙ Interpolate")
+        self.interp_btn.setObjectName("actionBtn")
+        self.interp_btn.clicked.connect(self._run_interpolate)
+        row_bar.addWidget(self.interp_btn)
 
         row_bar.addStretch()
         main.addLayout(row_bar)
@@ -293,39 +287,36 @@ class SamplePositionTab(QWidget):
         self.set_positions(self._positions)
         self._select_row(idx)
 
-    # ── Blender ────────────────────────────────────────────────────────────
+    # ── Path interpolation ─────────────────────────────────────────────────
 
-    def _run_blender(self):
-        if self._station is None:
-            QMessageBox.warning(self, "Blender", "No station connected.")
-            return
-        if not PARAMIKO_AVAILABLE:
-            QMessageBox.critical(self, "SSH Error",
-                                 "paramiko is not installed.\nRun: pip install paramiko")
+    def _run_interpolate(self):
+        if not self._positions:
+            QMessageBox.warning(self, "Interpolate", "Add at least 2 positions first.")
             return
         try:
             spacing = float(self.interp_edit.text())
+            if spacing <= 0:
+                raise ValueError
         except ValueError:
-            QMessageBox.warning(self, "Blender", "Enter a valid number for spacing.")
+            QMessageBox.warning(self, "Interpolate", "Enter a positive number for spacing.")
             return
 
-        data_dir = os.path.join(_DIR, "Data")
-        os.makedirs(data_dir, exist_ok=True)
-        self.blender_btn.setEnabled(False)
-        self.blender_btn.setText("Running…")
+        try:
+            result = catmull_rom_resample(self._positions, spacing)
+        except Exception as e:
+            QMessageBox.critical(self, "Interpolate Error", str(e))
+            return
 
-        worker = _BlenderWorker(self._station.cfg, self._positions, spacing, data_dir)
-        thread = QThread(self)
-        worker.moveToThread(thread)
-        thread.started.connect(worker.run)
-        worker.finished.connect(lambda result: self._station._on_blender_done(result, thread))
-        worker.error.connect(lambda msg: self._station._on_blender_error(msg, thread))
-        thread.start()
+        if not result:
+            QMessageBox.warning(self, "Interpolate", "No points generated.")
+            return
 
-    def _apply_blender_result(self, result):
+        self._apply_interpolation_result(result)
+
+    def _apply_interpolation_result(self, result):
         reply = QMessageBox.question(
-            self, "Blender Result",
-            f"Blender returned {len(result)} interpolated points.\n"
+            self, "Interpolation Result",
+            f"Generated {len(result)} interpolated points.\n"
             "Yes = Append to existing  |  No = Replace",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No |
             QMessageBox.StandardButton.Cancel,
@@ -623,6 +614,12 @@ class SamplePositionTab(QWidget):
             if not self._confirm_replace():
                 return
             self.set_positions([blank_position(i, layout="chip") for i in range(10)])
+        elif tmpl == "Grid Scan":
+            result = self._grid_dialog()
+            if result is not None:
+                if not self._confirm_replace():
+                    return
+                self.set_positions(result)
 
     def _capillary_dialog(self):
         dlg = QDialog(self)
@@ -675,6 +672,96 @@ class SamplePositionTab(QWidget):
                 name=f"cap_{i+1}", x=x, y=y, z=sz,
                 role="Sample", layout="capillary_linear",
             ).to_dict())
+        return result
+
+    def _grid_dialog(self):
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Grid Scan Template")
+        form = QFormLayout(dlg)
+
+        def _dspin(lo=-9999, hi=9999, val=0.0, dec=3):
+            s = QDoubleSpinBox()
+            s.setRange(lo, hi); s.setDecimals(dec); s.setValue(val)
+            return s
+
+        cx = _dspin(val=0.0);  form.addRow("Center X (mm):", cx)
+        cy = _dspin(val=0.0);  form.addRow("Center Y (mm):", cy)
+        cz = _dspin(val=0.0);  form.addRow("Z (mm):", cz)
+
+        form.addRow(QLabel(""))   # spacer
+
+        width  = _dspin(lo=0.001, hi=9999, val=2.0);  form.addRow("Width  X (mm):", width)
+        height = _dspin(lo=0.001, hi=9999, val=2.0);  form.addRow("Height Y (mm):", height)
+        step_x = _dspin(lo=0.001, hi=9999, val=0.1);  form.addRow("Step X (mm):", step_x)
+        step_y = _dspin(lo=0.001, hi=9999, val=0.1);  form.addRow("Step Y (mm):", step_y)
+
+        form.addRow(QLabel(""))
+
+        snake_combo = QComboBox()
+        snake_combo.addItems(["X-major  (scan rows → step in Y)",
+                              "Y-major  (scan columns ↓ step in X)"])
+        form.addRow("Snake direction:", snake_combo)
+
+        # live point-count label
+        count_lbl = QLabel()
+        form.addRow("Points:", count_lbl)
+
+        def _update_count():
+            try:
+                nx = max(1, round(width.value() / step_x.value()) + 1)
+                ny = max(1, round(height.value() / step_y.value()) + 1)
+                count_lbl.setText(f"{nx} × {ny} = {nx*ny}")
+            except ZeroDivisionError:
+                count_lbl.setText("—")
+
+        for w in (width, height, step_x, step_y):
+            w.valueChanged.connect(_update_count)
+        _update_count()
+
+        bbox = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        bbox.accepted.connect(dlg.accept)
+        bbox.rejected.connect(dlg.reject)
+        form.addRow(bbox)
+
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return None
+
+        nx = max(1, round(width.value() / step_x.value()) + 1)
+        ny = max(1, round(height.value() / step_y.value()) + 1)
+        x0 = cx.value() - width.value()  / 2
+        y0 = cy.value() - height.value() / 2
+        dx = width.value()  / (nx - 1) if nx > 1 else 0.0
+        dy = height.value() / (ny - 1) if ny > 1 else 0.0
+        z  = cz.value()
+        major = snake_combo.currentText()
+
+        result = []
+        n = 0
+        if major.startswith("X"):
+            # X-major: iterate rows (Y outer), columns (X inner), snake X
+            for j in range(ny):
+                y = y0 + j * dy
+                xs_row = range(nx) if j % 2 == 0 else range(nx - 1, -1, -1)
+                for i in xs_row:
+                    x = x0 + i * dx
+                    result.append(PositionRecord(
+                        name=f"g{n+1:04d}", x=round(x, 6), y=round(y, 6), z=round(z, 6),
+                        role="Sample", layout="grid_scan",
+                    ).to_dict())
+                    n += 1
+        else:
+            # Y-major: iterate columns (X outer), rows (Y inner), snake Y
+            for i in range(nx):
+                x = x0 + i * dx
+                ys_col = range(ny) if i % 2 == 0 else range(ny - 1, -1, -1)
+                for j in ys_col:
+                    y = y0 + j * dy
+                    result.append(PositionRecord(
+                        name=f"g{n+1:04d}", x=round(x, 6), y=round(y, 6), z=round(z, 6),
+                        role="Sample", layout="grid_scan",
+                    ).to_dict())
+                    n += 1
         return result
 
     def _confirm_replace(self) -> bool:

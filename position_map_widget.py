@@ -170,20 +170,38 @@ class PositionMapWidget(QWidget):
         self.plot.addItem(self._selection_item)
 
     def _draw_sequence_tube(self):
-        xs = [float(p.get("x", 0)) for p in self._positions]
-        ys = [float(p.get("y", 0)) for p in self._positions]
-        outer = pg.PlotCurveItem(xs, ys, pen=pg.mkPen("#93c5fd", width=6))
-        inner = pg.PlotCurveItem(xs, ys, pen=pg.mkPen("#3b82f6", width=2))
-        self.plot.addItem(outer)
-        self.plot.addItem(inner)
-        self._arrow_items.extend([outer, inner])
-        for i in range(1, len(xs)):
-            mx = (xs[i - 1] + xs[i]) / 2
-            my = (ys[i - 1] + ys[i]) / 2
-            spot = pg.ScatterPlotItem(
-                [mx], [my], size=8,
-                brush=pg.mkBrush("#2563eb"),
-                pen=pg.mkPen(None),
-            )
-            self.plot.addItem(spot)
-            self._arrow_items.append(spot)
+        # Split positions into contiguous segments of the same layout so that
+        # interpolated paths don't draw a connecting line back to the waypoints.
+        segments: list[list] = []
+        current: list = []
+        current_layout = None
+        for p in self._positions:
+            layout = p.get("layout", "")
+            if layout != current_layout and current:
+                segments.append(current)
+                current = []
+            current_layout = layout
+            current.append(p)
+        if current:
+            segments.append(current)
+
+        for seg in segments:
+            xs = [float(p.get("x", 0)) for p in seg]
+            ys = [float(p.get("y", 0)) for p in seg]
+            if len(xs) < 2:
+                continue
+            outer = pg.PlotCurveItem(xs, ys, pen=pg.mkPen("#93c5fd", width=6))
+            inner = pg.PlotCurveItem(xs, ys, pen=pg.mkPen("#3b82f6", width=2))
+            self.plot.addItem(outer)
+            self.plot.addItem(inner)
+            self._arrow_items.extend([outer, inner])
+            for i in range(1, len(xs)):
+                mx = (xs[i - 1] + xs[i]) / 2
+                my = (ys[i - 1] + ys[i]) / 2
+                spot = pg.ScatterPlotItem(
+                    [mx], [my], size=8,
+                    brush=pg.mkBrush("#2563eb"),
+                    pen=pg.mkPen(None),
+                )
+                self.plot.addItem(spot)
+                self._arrow_items.append(spot)

@@ -208,12 +208,6 @@ class SampleStation(QMainWindow):
         tm.addAction("Rack Builder…",        _open_rack_builder)
         tm.addAction("Chip Manual Map",      lambda: self.pos_tab.set_positions([blank_position(i, layout="chip") for i in range(10)]))
 
-        # ── Blender ──────────────────────────────────────────────────────────
-        bm = mb.addMenu("&Blender")
-        bm.addAction("⚙  Run Interpolation", lambda: self.pos_tab._run_blender())
-        bm.addSeparator()
-        bm.addAction("Blender Settings…",    self._open_blender_settings_dialog)
-
         # ── Setup ────────────────────────────────────────────────────────────
         sm = mb.addMenu("&Setup")
         sm.addAction("Open Setup…",          self._open_setup_dialog)
@@ -242,9 +236,6 @@ class SampleStation(QMainWindow):
             self._save_config()
             self._apply_config()
 
-    def _open_blender_settings_dialog(self):
-        self._open_setup_dialog(focus_group="ssh")
-
     def _reset_config(self):
         reply = QMessageBox.question(self, "Reset Config",
             "Reset all settings to factory defaults?",
@@ -267,7 +258,7 @@ class SampleStation(QMainWindow):
             "• Rich position management (name, role, group, solvent)<br>"
             "• Role-colored position map<br>"
             "• Capillary rack builder<br>"
-            "• Blender path interpolation via SSH<br>"
+            "• Catmull-Rom path interpolation<br>"
             "• Export to Bluesky CSV and Reducer Pairs CSV")
 
     def _build_motor_bar(self) -> QFrame:
@@ -1146,24 +1137,6 @@ class SampleStation(QMainWindow):
         if hasattr(self, 'pos_tab'):
             self.pos_tab._capture_from_stage()
 
-    # ── Blender SSH callbacks (used by _BlenderWorker thread) ─────────────
-
-    def _on_blender_done(self, result, thread):
-        thread.quit(); thread.wait()
-        self.pos_tab.blender_btn.setEnabled(True)
-        self.pos_tab.blender_btn.setText("Run Blender")
-        if result is None:
-            QMessageBox.critical(self, "Blender Error",
-                                 "Output file not found — Blender may have failed.")
-            return
-        self.pos_tab._apply_blender_result(result)
-
-    def _on_blender_error(self, msg: str, thread):
-        thread.quit(); thread.wait()
-        self.pos_tab.blender_btn.setEnabled(True)
-        self.pos_tab.blender_btn.setText("Run Blender")
-        QMessageBox.critical(self, "SSH Error", msg)
-
     def closeEvent(self, event):
         if self._af_thread is not None and self._af_thread.isRunning():
             if self._af_worker is not None:
@@ -1180,9 +1153,13 @@ class SampleStation(QMainWindow):
 
 # ── Entry point ────────────────────────────────────────────────────────────────
 
-if __name__ == "__main__":
+def main():
     app = QApplication(sys.argv)
     w = SampleStation()
     w.resize(1500, 960)
     w.show()
     sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    main()

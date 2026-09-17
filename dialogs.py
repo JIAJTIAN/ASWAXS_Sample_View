@@ -77,15 +77,6 @@ class SetupDialog(QDialog):
             ("ROI_PREFIX",       "ROI Prefix:"),
             ("AUTOFOCUS_STEP",   "Autofocus Step (mm):"),
         ]),
-        ("ssh", "SSH / Blender", [
-            ("BLENDER_HOST",    "Host:"),
-            ("BLENDER_USER",    "User:"),
-            ("BLENDER_KEY",     "SSH Key Path:"),
-            ("BLENDER_EXE",     "Blender Executable:"),
-            ("BLENDER_SCRIPT",  "Blender Script (Macro):"),
-            ("LOCAL_MOUNT",     "Local Mount:"),
-            ("REMOTE_MOUNT",    "Remote Mount:"),
-        ]),
     ]
 
     def __init__(self, cfg: dict, parent=None):

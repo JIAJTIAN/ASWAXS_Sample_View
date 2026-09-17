@@ -47,8 +47,6 @@ expected_keys = {
     "X_MOTOR_PV", "Y_MOTOR_PV", "Z_MOTOR_PV",
     "CAMERA_PREFIX", "IMAGE_PREFIX",
     "AUTOFOCUS_STEP", "AUTOFOCUS_SCRIPT",
-    "BLENDER_HOST", "BLENDER_USER", "BLENDER_KEY",
-    "BLENDER_SCRIPT", "LOCAL_MOUNT", "REMOTE_MOUNT",
 }
 missing_keys = expected_keys - set(w._setup_edits.keys())
 if missing_keys:

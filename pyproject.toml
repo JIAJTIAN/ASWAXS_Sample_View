@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aswaxs-sample-view"
+version = "1.1.0"
+description = "ASWAXS Sample Station — beamline sample control GUI with camera, motor control, and position management"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "PyQt6>=6.4",
+    "pyqtgraph>=0.13",
+    "pyepics",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.scripts]
+aswaxs-station = "sample_station:main"
+
+[tool.setuptools]
+py-modules = [
+    "sample_station",
+    "sample_view",
+    "position_tab",
+    "position_map_widget",
+    "position_models",
+    "position_io",
+    "position_rack_builder",
+    "spline_interpolator",
+    "epics_bridge",
+    "frame_decoder",
+    "autofocus",
+    "autofocus_worker",
+    "motor_panel",
+    "styles",
+    "dialogs",
+]

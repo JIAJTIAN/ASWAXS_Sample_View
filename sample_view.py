@@ -23,12 +23,6 @@ except ImportError:
     CV2_AVAILABLE = False
     print("Warning: cv2 (OpenCV) not available — focus parameter and colour conversion disabled")
 
-try:
-    import paramiko
-    PARAMIKO_AVAILABLE = True
-except ImportError:
-    PARAMIKO_AVAILABLE = False
-    print("Warning: paramiko not available — SSH/Blender remote functions disabled")
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QGroupBox,
@@ -71,12 +65,6 @@ DEFAULT_CONFIG = {
     "IMAGE_PREFIX":    "Teslong:image1:",
     "AUTOFOCUS_STEP":  "0.2",
     "AUTOFOCUS_SCRIPT": os.path.join(_DIR, "autofocus.py"),
-    "BLENDER_HOST":    "164.54.169.92",
-    "BLENDER_USER":    "chem_epics",
-    "BLENDER_KEY":     "/home/chem_epics/.ssh/mykey",
-    "BLENDER_SCRIPT":  "/home/chem_epics/cars6/Data/chemmat/ASWAXS/ASWAXS/Scripts/Blender_Macro.py",
-    "LOCAL_MOUNT":     "/home/chem_epics/cars6/Data",
-    "REMOTE_MOUNT":    "/home/chem_epics/cars6/Data",
 }
 
 
@@ -584,14 +572,14 @@ class SampleView(QWidget):
         file_row.addWidget(self.save_pos_btn)
         left.addLayout(file_row)
 
-        # Blender section
-        bl_box = QGroupBox("Blender Interpolation")
+        # Interpolation section
+        bl_box = QGroupBox("Path Interpolation")
         bl = QHBoxLayout(bl_box)
         bl.addWidget(QLabel("Spacing (mm):"))
         self.interp_edit = QLineEdit("1.0")
         self.interp_edit.setFixedWidth(52)
         bl.addWidget(self.interp_edit)
-        self.blender_btn = QPushButton("Run")
+        self.blender_btn = QPushButton("Interpolate")
         bl.addWidget(self.blender_btn)
         left.addWidget(bl_box)
 
@@ -649,14 +637,6 @@ class SampleView(QWidget):
             ("AUTOFOCUS_SCRIPT", "Autofocus Script Path"),
         ]))
 
-        v.addWidget(add_section("Blender / SSH Configuration", [
-            ("BLENDER_HOST",   "SSH Host"),
-            ("BLENDER_USER",   "SSH Username"),
-            ("BLENDER_KEY",    "SSH Private Key File"),
-            ("BLENDER_SCRIPT", "Blender Script (remote path)"),
-            ("LOCAL_MOUNT",    "Local Mount Path"),
-            ("REMOTE_MOUNT",   "Remote Mount Path"),
-        ]))
 
         btn_row = QHBoxLayout()
         self.apply_btn    = QPushButton("Apply")
@@ -1353,109 +1333,34 @@ class SampleView(QWidget):
             return
         self._pos_scatter.setData(arr[:, 0], arr[:, 1])
 
-    # ── Blender interpolation ─────────────────────────────────────────────
+    # ── Path interpolation ────────────────────────────────────────────────
 
     def blenderInterpolate(self):
         if not self.positions:
             QMessageBox.warning(self, "No Positions", "Add sample positions first.")
             return
-
         try:
-            spacing = float(self.interp_edit.text())   # BUG FIX: was eval()
+            spacing = float(self.interp_edit.text())
+            if spacing <= 0:
+                raise ValueError
         except ValueError:
-            QMessageBox.warning(self, "Value Error", "Spacing must be a number.")
+            QMessageBox.warning(self, "Value Error", "Spacing must be a positive number.")
             return
 
-        local_mount  = self.cfg.get("LOCAL_MOUNT", "")
-        remote_mount = self.cfg.get("REMOTE_MOUNT", "")
-
-        data_dir = os.path.join(_DIR, "Data")
-        os.makedirs(data_dir, exist_ok=True)
-        temp_pos = os.path.join(data_dir, "temp.pos")
-
-        arr = self._positions_to_array()
-        np.savetxt(temp_pos, arr, fmt="%.3f", header="X Y Z")
-
-        lifname = os.path.abspath(temp_pos)
-        ifname  = lifname.replace(local_mount, remote_mount).replace('\\', '/')
-
-        lofname, _ = QFileDialog.getSaveFileName(
-            self, "Save Interpolated Output", data_dir,
-            "CSV Files (*.csv);;Text Files (*.txt)"
-        )
-        if not lofname:
-            _safe_remove(temp_pos)
-            return
-
-        if not os.path.splitext(lofname)[1]:
-            lofname += ".csv"
-        ofname = lofname.replace(local_mount, remote_mount).replace('\\', '/')
-
-        blender_script = self.cfg.get("BLENDER_SCRIPT", "")
-        hostname = self.cfg.get("BLENDER_HOST", "")
-        username = self.cfg.get("BLENDER_USER", "")
-        key_file = self.cfg.get("BLENDER_KEY", "")
-        cmd = ['blender', '--background', '--python', blender_script,
-               '--', ifname, ofname, f"{spacing:.2f}"]
-
+        from spline_interpolator import catmull_rom_resample
         try:
-            local_ip = socket.gethostbyaddr(socket.gethostname())[2][0]
-        except Exception:
-            local_ip = ""
-
-        success = False
-        if local_ip != hostname:
-            success = self._run_blender_ssh(hostname, username, key_file, cmd)
-        else:
-            success = self._run_blender_local(cmd)
-
-        _safe_remove(temp_pos)
-
-        if not success:
-            return
-
-        if os.path.exists(lofname):
-            try:
-                data = np.loadtxt(lofname, comments='#', delimiter=',')
-                if data.ndim == 2 and data.shape[1] >= 2:
-                    self._interp_line.setData(data[:, 0], data[:, 1])
-            except Exception as e:
-                QMessageBox.warning(self, "Load Error", f"Could not load output:\n{e}")
-
-    def _run_blender_ssh(self, hostname, username, key_file, cmd) -> bool:
-        if not PARAMIKO_AVAILABLE:
-            QMessageBox.critical(self, "SSH Error",
-                                 "paramiko is not installed.\nRun: pip install paramiko")
-            return False
-        client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        try:
-            client.connect(hostname, port=22, username=username, key_filename=key_file)
-            stdin, stdout, stderr = client.exec_command(" ".join(cmd))
-            out = stdout.read().decode()
-            err = stderr.read().decode()
-            if out:
-                print(out)
-            if err:
-                print("stderr:", err)
-            return True
+            result = catmull_rom_resample(self.positions, spacing)
         except Exception as e:
-            QMessageBox.critical(self, "SSH Error", str(e))
-            return False
-        finally:
-            client.close()
+            QMessageBox.critical(self, "Interpolation Error", str(e))
+            return
 
-    def _run_blender_local(self, cmd) -> bool:
-        try:
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            out, err = proc.communicate()
-            print(out.decode())
-            if err:
-                print("stderr:", err.decode())
-            return True
-        except Exception as e:
-            QMessageBox.critical(self, "Blender Error", str(e))
-            return False
+        if not result:
+            QMessageBox.warning(self, "Interpolate", "No points generated.")
+            return
+
+        xs = [r["x"] for r in result]
+        ys = [r["y"] for r in result]
+        self._interp_line.setData(xs, ys)
 
     # ── Setup tab handlers ────────────────────────────────────────────────
 

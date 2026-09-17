@@ -19,13 +19,6 @@ DEFAULT_CONFIG = {
     "IMAGE_PREFIX":     "Teslong:image1:",
     "ROI_PREFIX":       "15PS1:ROI1:",
     "AUTOFOCUS_STEP":   "0.2",
-    "BLENDER_HOST":     "164.54.169.92",
-    "BLENDER_USER":     "chem_epics",
-    "BLENDER_KEY":      "/home/chem_epics/.ssh/mykey",
-    "BLENDER_EXE":      "blender",
-    "BLENDER_SCRIPT":   "/home/chem_epics/cars6/Data/chemmat/ASWAXS/ASWAXS/Scripts/Blender_Macro.py",
-    "LOCAL_MOUNT":      "/home/chem_epics/cars6/Data",
-    "REMOTE_MOUNT":     "/home/chem_epics/cars6/Data",
 }
 
 # ── Position field definitions ─────────────────────────────────────────────────
