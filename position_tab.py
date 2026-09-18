@@ -675,6 +675,16 @@ class SamplePositionTab(QWidget):
         return result
 
     def _grid_dialog(self):
+        # Read current motor positions as default start coordinates
+        cur_x = cur_y = cur_z = 0.0
+        try:
+            if self._station is not None:
+                cur_x = float(self._station.x_motor.rbv_lbl.text())
+                cur_y = float(self._station.y_motor.rbv_lbl.text())
+                cur_z = float(self._station.z_motor.rbv_lbl.text())
+        except (ValueError, AttributeError):
+            pass
+
         dlg = QDialog(self)
         dlg.setWindowTitle("Grid Scan Template")
         form = QFormLayout(dlg)
@@ -684,9 +694,9 @@ class SamplePositionTab(QWidget):
             s.setRange(lo, hi); s.setDecimals(dec); s.setValue(val)
             return s
 
-        x0s = _dspin(val=0.0);  form.addRow("Start X  — left (mm):", x0s)
-        y0s = _dspin(val=0.0);  form.addRow("Start Y  — top  (mm):", y0s)
-        cz  = _dspin(val=0.0);  form.addRow("Z (mm):", cz)
+        x0s = _dspin(val=cur_x);  form.addRow("Start X  — left (mm):", x0s)
+        y0s = _dspin(val=cur_y);  form.addRow("Start Y  — top  (mm):", y0s)
+        cz  = _dspin(val=cur_z);  form.addRow("Z (mm):", cz)
 
         form.addRow(QLabel(""))   # spacer
 
