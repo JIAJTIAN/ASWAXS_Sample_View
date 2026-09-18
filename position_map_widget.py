@@ -86,6 +86,11 @@ class PositionMapWidget(QWidget):
         if not self._positions:
             return
 
+        n_pts = len(self._positions)
+        _LABEL_LIMIT = 300    # suppress text labels above this count
+        _ARROW_LIMIT = 500    # suppress sequence arrows above this count
+        pt_size = 6 if n_pts > 1000 else 12   # smaller dots for dense grids
+
         # Group by role
         role_groups: dict[str, dict] = {}
         for i, pos in enumerate(self._positions):
@@ -99,18 +104,19 @@ class PositionMapWidget(QWidget):
         for role, data in role_groups.items():
             hex_color = ROLE_COLORS.get(role, "#888888")
             qc = QColor(hex_color)
+            pen = pg.mkPen(None) if n_pts > 1000 else pg.mkPen(qc.darker(140), width=1)
             scatter = pg.ScatterPlotItem(
                 x=data["xs"], y=data["ys"],
-                size=12,
+                size=pt_size,
                 brush=pg.mkBrush(qc),
-                pen=pg.mkPen(qc.darker(140), width=1),
+                pen=pen,
                 data=data["indices"],
             )
             scatter.sigClicked.connect(self._scatter_clicked)
             self.plot.addItem(scatter)
             self._scatter_items.append(scatter)
 
-        if self._show_names:
+        if self._show_names and n_pts <= _LABEL_LIMIT:
             for pos in self._positions:
                 name = str(pos.get("name", ""))
                 if name:
@@ -119,7 +125,7 @@ class PositionMapWidget(QWidget):
                     self.plot.addItem(text)
                     self._label_items.append(text)
 
-        if self._show_arrows and len(self._positions) > 1:
+        if self._show_arrows and n_pts > 1 and n_pts <= _ARROW_LIMIT:
             self._draw_sequence_tube()
 
         self._draw_selection()
@@ -196,13 +202,12 @@ class PositionMapWidget(QWidget):
             self.plot.addItem(outer)
             self.plot.addItem(inner)
             self._arrow_items.extend([outer, inner])
-            for i in range(1, len(xs)):
-                mx = (xs[i - 1] + xs[i]) / 2
-                my = (ys[i - 1] + ys[i]) / 2
-                spot = pg.ScatterPlotItem(
-                    [mx], [my], size=8,
-                    brush=pg.mkBrush("#2563eb"),
-                    pen=pg.mkPen(None),
-                )
-                self.plot.addItem(spot)
-                self._arrow_items.append(spot)
+            mxs = [(xs[i - 1] + xs[i]) / 2 for i in range(1, len(xs))]
+            mys = [(ys[i - 1] + ys[i]) / 2 for i in range(1, len(ys))]
+            midpoints = pg.ScatterPlotItem(
+                mxs, mys, size=8,
+                brush=pg.mkBrush("#2563eb"),
+                pen=pg.mkPen(None),
+            )
+            self.plot.addItem(midpoints)
+            self._arrow_items.append(midpoints)
