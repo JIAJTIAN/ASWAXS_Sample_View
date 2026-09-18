@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
     QCheckBox, QFileDialog, QMessageBox, QSplitter, QAbstractItemView,
     QDialog, QDialogButtonBox, QFrame, QTableWidget, QTableWidgetItem,
     QComboBox, QSpinBox, QDoubleSpinBox, QFormLayout, QMenu,
+    QStyledItemDelegate,
 )
 from PyQt6.QtCore import (
     Qt, pyqtSignal, QEvent, QItemSelectionModel,
@@ -17,6 +18,29 @@ from PyQt6.QtCore import (
 from PyQt6.QtGui import QKeySequence, QShortcut
 
 from position_models import POSITION_FIELDS, NUMERIC_FIELDS, ROLE_PRESETS, PositionRecord
+
+_ROLE_COL = POSITION_FIELDS.index("role")
+_UNDO_LIMIT_LARGE = 5   # shallow undo history when list is large
+_LARGE_THRESHOLD  = 1000
+
+
+class _RoleDelegate(QStyledItemDelegate):
+    """Shows a QComboBox only when a role cell is being edited (not permanently)."""
+
+    def createEditor(self, parent, option, index):
+        combo = QComboBox(parent)
+        combo.addItems(ROLE_PRESETS)
+        combo.setAutoFillBackground(True)
+        return combo
+
+    def setEditorData(self, editor, index):
+        editor.setCurrentText(index.data(Qt.ItemDataRole.DisplayRole) or "")
+
+    def setModelData(self, editor, model, index):
+        model.setData(index, editor.currentText(), Qt.ItemDataRole.EditRole)
+
+    def updateEditorGeometry(self, editor, option, index):
+        editor.setGeometry(option.rect)
 from position_io import (
     normalize_positions, blank_position, load_positions, save_positions,
     export_bluesky_csv, export_reducer_pairs_csv, _flt,
@@ -57,7 +81,8 @@ class SamplePositionTab(QWidget):
         if self._undo_stack and self._undo_stack[-1] == snapshot:
             return
         self._undo_stack.append(snapshot)
-        if len(self._undo_stack) > self._MAX_UNDO:
+        limit = _UNDO_LIMIT_LARGE if len(self._positions) > _LARGE_THRESHOLD else self._MAX_UNDO
+        if len(self._undo_stack) > limit:
             self._undo_stack.pop(0)
         self._redo_stack.clear()
 
@@ -218,6 +243,7 @@ class SamplePositionTab(QWidget):
         self.table.setDropIndicatorShown(True)
         self.table.setDragDropOverwriteMode(False)
         self.table.viewport().installEventFilter(self)  # captures source row + handles Drop
+        self.table.setItemDelegateForColumn(_ROLE_COL, _RoleDelegate(self.table))
         self.table.itemChanged.connect(self._item_changed)
         self.table.selectionModel().selectionChanged.connect(self._selection_changed)
         self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -339,22 +365,13 @@ class SamplePositionTab(QWidget):
 
     def _refresh_table(self):
         self._updating = True
+        self.table.setUpdatesEnabled(False)
         self.table.setRowCount(len(self._positions))
         for r, pos in enumerate(self._positions):
             for c, field in enumerate(POSITION_FIELDS):
-                val = pos.get(field, "")
-                if field == "role":
-                    combo = QComboBox()
-                    combo.addItems(ROLE_PRESETS)
-                    if str(val) in ROLE_PRESETS:
-                        combo.setCurrentText(str(val))
-                    combo.currentTextChanged.connect(
-                        lambda v, row=r: self._role_changed(row, v)
-                    )
-                    self.table.setCellWidget(r, c, combo)
-                else:
-                    item = QTableWidgetItem(str(val))
-                    self.table.setItem(r, c, item)
+                item = QTableWidgetItem(str(pos.get(field, "")))
+                self.table.setItem(r, c, item)
+        self.table.setUpdatesEnabled(True)
         self._updating = False
 
     def eventFilter(self, watched, event):
@@ -398,22 +415,21 @@ class SamplePositionTab(QWidget):
             return
         field = POSITION_FIELDS[col]
         val   = item.text()
+        if field == "role":
+            # Apply to all selected rows when multiple are highlighted
+            rows_to_update = self._pending_role_rows if self._pending_role_rows else [row]
+            self._push_undo()
+            for r in rows_to_update:
+                if r < len(self._positions):
+                    self._positions[r]["role"] = val
+            self._pending_role_rows = []
+            self._commit()
+            return
         if field in NUMERIC_FIELDS:
             val = _flt(val)
         self._push_undo()
         self._positions[row][field] = val
         self._commit(selected_row=row)
-
-    def _role_changed(self, row: int, value: str):
-        if self._updating:
-            return
-        rows_to_update = self._pending_role_rows if self._pending_role_rows else [row]
-        self._push_undo()
-        for r in rows_to_update:
-            if r < len(self._positions):
-                self._positions[r]["role"] = value
-        self._pending_role_rows = []
-        self._commit()
 
     def _commit(self, selected_row: int | None = None):
         self._positions = normalize_positions(self._positions)
