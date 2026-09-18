@@ -153,6 +153,12 @@ class SampleStation(QMainWindow):
         except Exception as e:
             QMessageBox.warning(self, "Config Error", f"Could not save:\n{e}")
 
+    def _load_config_action(self):
+        self.cfg = self._load_config()
+        self._apply_config()
+        QMessageBox.information(self, "Config Loaded",
+                                f"Configuration loaded from:\n{CONFIG_FILE}")
+
     # ── UI construction ────────────────────────────────────────────────────
 
     def _build_ui(self):
@@ -221,6 +227,7 @@ class SampleStation(QMainWindow):
         sm = mb.addMenu("&Setup")
         sm.addAction("Open Setup…",          self._open_setup_dialog)
         sm.addSeparator()
+        sm.addAction("Load Config",          self._load_config_action)
         sm.addAction("Save Config",          self._save_config)
         sm.addAction("Reset to Defaults",    self._reset_config)
 
