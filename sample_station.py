@@ -55,9 +55,28 @@ except Exception as _epics_err:
 
 # ── Module-level path constants ────────────────────────────────────────────────
 
-_DIR        = os.path.dirname(os.path.abspath(__file__))
-CONFIG_FILE = os.path.join(_DIR, "sample_station_config.json")
-CALIB_FILE  = os.path.join(_DIR, "Data", "camera_calib.txt")
+_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Config lives in the user home directory so it is found whether the app is
+# launched directly (python sample_station.py) or via pip install (aswaxs-station).
+_CONFIG_HOME = os.path.join(os.path.expanduser("~"), ".aswaxs_sample_view")
+os.makedirs(_CONFIG_HOME, exist_ok=True)
+CONFIG_FILE  = os.path.join(_CONFIG_HOME, "sample_station_config.json")
+
+# One-time migration: if the old script-directory config exists and the new
+# location is empty, copy it over so existing settings are not lost.
+_OLD_CONFIG = os.path.join(_DIR, "sample_station_config.json")
+if not os.path.exists(CONFIG_FILE) and os.path.exists(_OLD_CONFIG):
+    import shutil as _shutil
+    _shutil.copy2(_OLD_CONFIG, CONFIG_FILE)
+
+CALIB_FILE = os.path.join(_CONFIG_HOME, "camera_calib.txt")
+
+# Also migrate calibration file if present at old location.
+_OLD_CALIB = os.path.join(_DIR, "Data", "camera_calib.txt")
+if not os.path.exists(CALIB_FILE) and os.path.exists(_OLD_CALIB):
+    import shutil as _shutil
+    _shutil.copy2(_OLD_CALIB, CALIB_FILE)
 
 # ── Local module imports ───────────────────────────────────────────────────────
 
