@@ -765,9 +765,9 @@ class SamplePositionTab(QWidget):
         result = []
         n = 0
         if major.startswith("X"):
-            # X-major: row 0 at top-left, scan right (+X), step down (-Y), snake X
+            # X-major: row 0 at top-left, scan right (+X), step down (+Y), snake X
             for j in range(ny):
-                y = y0 - j * dy
+                y = y0 + j * dy
                 xs_row = range(nx) if j % 2 == 0 else range(nx - 1, -1, -1)
                 for i in xs_row:
                     x = x0 + i * dx
@@ -777,12 +777,12 @@ class SamplePositionTab(QWidget):
                     ).to_dict())
                     n += 1
         else:
-            # Y-major: col 0 at top-left, scan down (-Y), step right (+X), snake Y
+            # Y-major: col 0 at top-left, scan down (+Y), step right (+X), snake Y
             for i in range(nx):
                 x = x0 + i * dx
                 ys_col = range(ny) if i % 2 == 0 else range(ny - 1, -1, -1)
                 for j in ys_col:
-                    y = y0 - j * dy
+                    y = y0 + j * dy
                     result.append(PositionRecord(
                         name=f"g{n+1:04d}", x=round(x, 6), y=round(y, 6), z=round(z, 6),
                         role="Sample", layout="grid_scan",
