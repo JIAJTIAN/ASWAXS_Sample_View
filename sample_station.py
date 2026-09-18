@@ -114,6 +114,7 @@ class SampleStation(QMainWindow):
         self.beam_x        = 640
         self.beam_y        = 480
         self._acquire_pv: PV | None = None
+        self._pva_thread = None
         self._center_initialized = False
         self._last_frame_time  = 0.0
         self._cam_fps_limit    = 15        # max display frames per second
@@ -518,6 +519,9 @@ class SampleStation(QMainWindow):
         if hasattr(self, '_cam_conn_timer'):
             self._cam_conn_timer.stop()
 
+        # Stop existing PVA thread if running
+        self._stop_pva_thread()
+
         for attr in ('_img_pv', '_wid_pv', '_hgt_pv', '_state_pv'):
             old = getattr(self, attr, None)
             if old is not None:
@@ -532,40 +536,28 @@ class SampleStation(QMainWindow):
                 self.cam_state_lbl.setStyleSheet("color: #9ca3af; font-size: 8.5pt;")
             return
 
-        cam = self.cfg.get("CAMERA_PREFIX", "").strip()
-        img = self.cfg.get("IMAGE_PREFIX",  "").strip()
-        if not cam or not img:
+        cam     = self.cfg.get("CAMERA_PREFIX", "").strip()
+        img     = self.cfg.get("IMAGE_PREFIX",  "").strip()
+        pva_ch  = self.cfg.get("PVA_CHANNEL",   "").strip()
+        pva_host = self.cfg.get("PVA_HOST",     "").strip()
+
+        if not cam:
             self.cam_state_lbl.setText("● Camera: prefix not configured")
             self.cam_state_lbl.setStyleSheet("color: #dc2626; font-size: 8.5pt;")
             return
 
         try:
-            self._img_bridge   = _PVBridge()
-            self._wid_bridge   = _PVBridge()
-            self._hgt_bridge   = _PVBridge()
             self._state_bridge = _PVBridge()
             self._acq_bridge   = _PVBridge()
-
-            self._img_bridge.changed.connect(self._on_image_data)
-            self._wid_bridge.changed.connect(self._on_width_data)
-            self._hgt_bridge.changed.connect(self._on_height_data)
             self._state_bridge.changed.connect(self._on_cam_state)
             self._state_bridge.conn_state.connect(self._on_cam_conn)
             self._acq_bridge.conn_state.connect(self._on_acquire_conn)
 
-            self._img_pv   = PV(img + "ArrayData",
-                                callback=self._img_bridge, auto_monitor=True)
-            self._wid_pv   = PV(cam + "ArraySizeX_RBV",
-                                callback=self._wid_bridge, auto_monitor=True)
-            self._hgt_pv   = PV(cam + "ArraySizeY_RBV",
-                                callback=self._hgt_bridge, auto_monitor=True)
             self._state_pv = PV(cam + "DetectorState_RBV",
                                 callback=self._state_bridge,
                                 connection_callback=self._state_bridge.conn_cb,
                                 auto_monitor=True)
 
-            # Acquire PV — call put(1) immediately (pyepics queues it until connected)
-            # Also attach connection_callback as a fallback for reconfigure calls
             if self._acquire_pv is not None:
                 try:
                     self._acquire_pv.disconnect()
@@ -574,13 +566,34 @@ class SampleStation(QMainWindow):
             self._acquire_pv = PV(cam + "Acquire",
                                   connection_callback=self._acq_bridge.conn_cb)
             atexit.register(self._stop_acquire)
-            self._acquire_pv.put(1)   # pyepics queues internally if not yet connected
+            self._acquire_pv.put(1)
 
-            # Show connecting state immediately
-            self.cam_state_lbl.setText("● Camera: connecting…")
-            self.cam_state_lbl.setStyleSheet("color: #d97706; font-size: 8.5pt;")
+            if pva_ch:
+                # ── PVAccess path ──────────────────────────────────────────
+                self._start_pva_thread(pva_ch, pva_host)
+                self.cam_state_lbl.setText("● Camera: PVA connecting…")
+                self.cam_state_lbl.setStyleSheet("color: #d97706; font-size: 8.5pt;")
+            else:
+                # ── Channel Access path ────────────────────────────────────
+                if not img:
+                    self.cam_state_lbl.setText("● Camera: IMAGE_PREFIX not configured")
+                    self.cam_state_lbl.setStyleSheet("color: #dc2626; font-size: 8.5pt;")
+                    return
+                self._img_bridge = _PVBridge()
+                self._wid_bridge = _PVBridge()
+                self._hgt_bridge = _PVBridge()
+                self._img_bridge.changed.connect(self._on_image_data)
+                self._wid_bridge.changed.connect(self._on_width_data)
+                self._hgt_bridge.changed.connect(self._on_height_data)
+                self._img_pv = PV(img + "ArrayData",
+                                  callback=self._img_bridge, auto_monitor=True)
+                self._wid_pv = PV(cam + "ArraySizeX_RBV",
+                                  callback=self._wid_bridge, auto_monitor=True)
+                self._hgt_pv = PV(cam + "ArraySizeY_RBV",
+                                  callback=self._hgt_bridge, auto_monitor=True)
+                self.cam_state_lbl.setText("● Camera: connecting…")
+                self.cam_state_lbl.setStyleSheet("color: #d97706; font-size: 8.5pt;")
 
-            # Timeout: if DetectorState_RBV has not connected in 5 s, warn user
             self._cam_conn_timer = QTimer(self)
             self._cam_conn_timer.setSingleShot(True)
             self._cam_conn_timer.timeout.connect(self._on_cam_conn_timeout)
@@ -590,6 +603,22 @@ class SampleStation(QMainWindow):
             print(f"Camera PV setup error: {e}")
             self.cam_state_lbl.setText(f"● Camera: error — {e}")
             self.cam_state_lbl.setStyleSheet("color: #dc2626; font-size: 8.5pt;")
+
+    def _start_pva_thread(self, channel: str, host: str = ""):
+        from pva_monitor import PVAMonitorThread
+        self._pva_thread = PVAMonitorThread(
+            channel, pva_host=host, fps_limit=self._cam_fps_limit, parent=self
+        )
+        self._pva_thread.frame_ready.connect(self._on_pva_frame)
+        self._pva_thread.connection_changed.connect(self._on_pva_conn)
+        self._pva_thread.error_occurred.connect(self._on_pva_error)
+        self._pva_thread.start()
+
+    def _stop_pva_thread(self):
+        t = getattr(self, '_pva_thread', None)
+        if t is not None:
+            t.stop()
+            self._pva_thread = None
 
     @pyqtSlot(str, bool)
     def _on_cam_conn(self, _pvname: str, conn: bool):
@@ -687,6 +716,67 @@ class SampleStation(QMainWindow):
                 self.focus_lbl.setText("(cv2 N/A)")
         except Exception as e:
             print(f"[camera] {e}")
+
+    @pyqtSlot(object)
+    def _on_pva_frame(self, arr):
+        now = time.monotonic()
+        if now - self._last_frame_time < 1.0 / self._cam_fps_limit:
+            return
+        self._last_frame_time = now
+        try:
+            if arr.ndim == 2:
+                h, w = arr.shape
+                if arr.dtype != np.uint8:
+                    lo, hi = int(arr.min()), int(arr.max())
+                    if hi > lo:
+                        gray = ((arr.astype(np.float32) - lo) * (255.0 / (hi - lo))).astype(np.uint8)
+                    else:
+                        gray = np.zeros((h, w), dtype=np.uint8)
+                else:
+                    gray = arr
+            elif arr.ndim == 3:
+                h, w = arr.shape[:2]
+                if CV2_AVAILABLE:
+                    gray = cv2.cvtColor(arr, cv2.COLOR_BGR2GRAY)
+                else:
+                    gray = arr.mean(axis=2).astype(np.uint8)
+            else:
+                return
+            self.image        = gray
+            self.image_width  = w
+            self.image_height = h
+            self.image_item.setImage(gray, autoLevels=False, levels=(0, 255))
+            if not self._center_initialized:
+                self.view_box.autoRange()
+                self.image_cx = w // 2
+                self.image_cy = h // 2
+                self._center_x_line.setValue(w / 2)
+                self._center_y_line.setValue(h / 2)
+                self._center_initialized = True
+            if CV2_AVAILABLE:
+                fp = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+                self.focus_lbl.setText(f"{fp:.3f}")
+            else:
+                self.focus_lbl.setText("(cv2 N/A)")
+        except Exception as e:
+            print(f"[pva frame] {e}")
+
+    @pyqtSlot(bool)
+    def _on_pva_conn(self, connected: bool):
+        if connected:
+            if hasattr(self, '_cam_conn_timer'):
+                self._cam_conn_timer.stop()
+            self.cam_state_lbl.setText("● Camera: PVA live")
+            self.cam_state_lbl.setStyleSheet("color: #16a34a; font-size: 8.5pt;")
+        else:
+            self.cam_state_lbl.setText("● Camera: PVA disconnected")
+            self.cam_state_lbl.setStyleSheet("color: #dc2626; font-size: 8.5pt;")
+
+    @pyqtSlot(str)
+    def _on_pva_error(self, msg: str):
+        print(f"[pva] {msg}")
+        self.cam_state_lbl.setText(f"● Camera: PVA error — {msg}")
+        self.cam_state_lbl.setStyleSheet("color: #dc2626; font-size: 8.5pt;")
 
     # ── ROI overlay ────────────────────────────────────────────────────────────
 
@@ -1154,6 +1244,7 @@ class SampleStation(QMainWindow):
             self.pos_tab._capture_from_stage()
 
     def closeEvent(self, event):
+        self._stop_pva_thread()
         if self._af_thread is not None and self._af_thread.isRunning():
             if self._af_worker is not None:
                 self._af_worker.cancel()

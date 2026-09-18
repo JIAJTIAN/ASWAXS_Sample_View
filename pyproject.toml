@@ -38,4 +38,5 @@ py-modules = [
     "motor_panel",
     "styles",
     "dialogs",
+    "pva_monitor",
 ]

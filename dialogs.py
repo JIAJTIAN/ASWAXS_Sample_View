@@ -76,6 +76,8 @@ class SetupDialog(QDialog):
             ("IMAGE_PREFIX",     "Image Prefix:"),
             ("ROI_PREFIX",       "ROI Prefix:"),
             ("AUTOFOCUS_STEP",   "Autofocus Step (mm):"),
+            ("PVA_CHANNEL",      "PVA Channel (NTNDArray):"),
+            ("PVA_HOST",         "PVA Host (blank = auto):"),
         ]),
     ]
 

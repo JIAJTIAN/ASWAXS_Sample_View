@@ -19,6 +19,8 @@ DEFAULT_CONFIG = {
     "IMAGE_PREFIX":     "Teslong:image1:",
     "ROI_PREFIX":       "15PS1:ROI1:",
     "AUTOFOCUS_STEP":   "0.2",
+    "PVA_CHANNEL":      "",
+    "PVA_HOST":         "",
 }
 
 # ── Position field definitions ─────────────────────────────────────────────────
