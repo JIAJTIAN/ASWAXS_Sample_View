@@ -87,8 +87,8 @@ class PositionMapWidget(QWidget):
             return
 
         n_pts = len(self._positions)
-        _LABEL_LIMIT = 300    # suppress text labels above this count
-        _ARROW_LIMIT = 500    # suppress sequence arrows above this count
+        _LABEL_LIMIT = 1000   # suppress text labels above this count
+        _ARROW_LIMIT = 1000   # suppress sequence arrows above this count
         pt_size = 6 if n_pts > 1000 else 12   # smaller dots for dense grids
 
         # Group by role
