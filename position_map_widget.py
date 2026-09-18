@@ -88,7 +88,6 @@ class PositionMapWidget(QWidget):
 
         n_pts = len(self._positions)
         _LABEL_LIMIT = 1000   # suppress text labels above this count
-        _ARROW_LIMIT = 1000   # suppress sequence arrows above this count
         pt_size = 6 if n_pts > 1000 else 12   # smaller dots for dense grids
 
         # Group by role
@@ -125,7 +124,7 @@ class PositionMapWidget(QWidget):
                     self.plot.addItem(text)
                     self._label_items.append(text)
 
-        if self._show_arrows and n_pts > 1 and n_pts <= _ARROW_LIMIT:
+        if self._show_arrows and n_pts > 1:
             self._draw_sequence_tube()
 
         self._draw_selection()
