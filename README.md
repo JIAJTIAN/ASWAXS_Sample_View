@@ -94,21 +94,18 @@ Settings are persisted to `sample_station_config.json` alongside the script.
 
 ## Installation
 
-### pip (recommended)
+### pip — editable install (recommended)
 
-```bash
-pip install git+https://github.com/JIAJTIAN/ASWAXS_Sample_View.git
-```
-
-Or from a local clone:
+Editable install keeps `sample_station_config.json` and the calibration file in the
+source directory where you expect them, and `aswaxs-station` works from any directory.
 
 ```bash
 git clone https://github.com/JIAJTIAN/ASWAXS_Sample_View.git
 cd ASWAXS_Sample_View
-pip install .
+pip install -e .
 ```
 
-Then launch:
+Then launch from anywhere:
 
 ```bash
 aswaxs-station
