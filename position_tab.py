@@ -43,7 +43,7 @@ class _RoleDelegate(QStyledItemDelegate):
         editor.setGeometry(option.rect)
 from position_io import (
     normalize_positions, blank_position, load_positions, save_positions,
-    export_bluesky_csv, export_reducer_pairs_csv, _flt,
+    export_bluesky_csv, export_bluesky_csv_split, export_reducer_pairs_csv, _flt,
 )
 from position_map_widget import PositionMapWidget
 from position_rack_builder import RackBuilderDialog
@@ -133,6 +133,10 @@ class SamplePositionTab(QWidget):
         exp_bs_btn = QPushButton("Export Bluesky CSV")
         exp_bs_btn.clicked.connect(self._export_bluesky)
         top.addWidget(exp_bs_btn)
+
+        exp_bs_split_btn = QPushButton("Export Bluesky CSV (Split)")
+        exp_bs_split_btn.clicked.connect(self._export_bluesky_split)
+        top.addWidget(exp_bs_split_btn)
 
         exp_rd_btn = QPushButton("Export Reducer Pairs")
         exp_rd_btn.clicked.connect(self._export_reducer)
@@ -599,6 +603,60 @@ class SamplePositionTab(QWidget):
                 export_bluesky_csv(path, self.positions())
             except Exception as e:
                 QMessageBox.critical(self, "Export Error", str(e))
+
+    def _export_bluesky_split(self):
+        positions = self.positions()
+        if not positions:
+            QMessageBox.warning(self, "No Positions", "No positions to export.")
+            return
+
+        # Ask for chunk size
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Export Bluesky CSV — Split")
+        form = QFormLayout(dlg)
+
+        total_lbl = QLabel(f"Total points: {len(positions)}")
+        form.addRow(total_lbl)
+
+        chunk_spin = QSpinBox()
+        chunk_spin.setRange(10, 10000)
+        chunk_spin.setValue(200)
+        chunk_spin.setSuffix(" pts / plan")
+        form.addRow("Points per plan:", chunk_spin)
+
+        preview_lbl = QLabel()
+        form.addRow("Plans to create:", preview_lbl)
+
+        def _update():
+            import math
+            n = math.ceil(len(positions) / chunk_spin.value())
+            preview_lbl.setText(str(n))
+        chunk_spin.valueChanged.connect(_update)
+        _update()
+
+        bbox = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        bbox.accepted.connect(dlg.accept)
+        bbox.rejected.connect(dlg.reject)
+        form.addRow(bbox)
+
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export Bluesky CSV (Split) — choose base filename", "", "CSV (*.csv)")
+        if not path:
+            return
+
+        try:
+            n_files = export_bluesky_csv_split(path, positions, chunk_spin.value())
+            import os
+            stem = os.path.splitext(os.path.basename(path))[0]
+            QMessageBox.information(self, "Export Complete",
+                f"Exported {len(positions)} points as {n_files} plan files:\n"
+                f"{stem}_001.csv … {stem}_{n_files:03d}.csv")
+        except Exception as e:
+            QMessageBox.critical(self, "Export Error", str(e))
 
     def _export_reducer(self):
         path, _ = QFileDialog.getSaveFileName(self, "Export Reducer Pairs", "", "CSV (*.csv)")

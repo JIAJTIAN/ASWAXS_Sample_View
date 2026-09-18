@@ -203,6 +203,26 @@ def export_bluesky_csv(path, positions: list) -> None:
             })
 
 
+def export_bluesky_csv_split(base_path: str, positions: list, chunk_size: int) -> int:
+    """Split positions into chunks and export as numbered CSV files.
+
+    Returns the number of files written.
+    Files are named  <stem>_001.csv, <stem>_002.csv, …
+    """
+    import os
+    stem, ext = os.path.splitext(str(base_path))
+    if not ext:
+        ext = '.csv'
+    positions = normalize_positions(positions)
+    n_files = 0
+    for i in range(0, len(positions), chunk_size):
+        chunk = positions[i : i + chunk_size]
+        path = f"{stem}_{n_files + 1:03d}{ext}"
+        export_bluesky_csv(path, chunk)
+        n_files += 1
+    return n_files
+
+
 def export_reducer_pairs_csv(path, positions: list) -> None:
     positions = normalize_positions(positions)
     fieldnames = ["name", "sample_group", "solvent_group",
