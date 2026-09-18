@@ -32,6 +32,7 @@ class PositionMapWidget(QWidget):
         self.plot.setLabel("bottom", "x (mm)")
         self.plot.setLabel("left",   "y (mm)")
         self.plot.showGrid(x=True, y=True, alpha=0.22)
+        self.plot.getViewBox().invertY(True)   # +Y goes down, matching stage coordinates
         self.plot.enableAutoRange(False)
         self.plot.setRange(xRange=[-10, 10], yRange=[-10, 10])
         lay.addWidget(self.plot)
