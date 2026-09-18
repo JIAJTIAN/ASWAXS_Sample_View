@@ -684,9 +684,9 @@ class SamplePositionTab(QWidget):
             s.setRange(lo, hi); s.setDecimals(dec); s.setValue(val)
             return s
 
-        cx = _dspin(val=0.0);  form.addRow("Center X (mm):", cx)
-        cy = _dspin(val=0.0);  form.addRow("Center Y (mm):", cy)
-        cz = _dspin(val=0.0);  form.addRow("Z (mm):", cz)
+        x0s = _dspin(val=0.0);  form.addRow("Start X  — left (mm):", x0s)
+        y0s = _dspin(val=0.0);  form.addRow("Start Y  — top  (mm):", y0s)
+        cz  = _dspin(val=0.0);  form.addRow("Z (mm):", cz)
 
         form.addRow(QLabel(""))   # spacer
 
@@ -729,8 +729,8 @@ class SamplePositionTab(QWidget):
 
         nx = max(1, round(width.value() / step_x.value()) + 1)
         ny = max(1, round(height.value() / step_y.value()) + 1)
-        x0 = cx.value() - width.value()  / 2
-        y0 = cy.value() - height.value() / 2
+        x0 = x0s.value()
+        y0 = y0s.value()
         dx = width.value()  / (nx - 1) if nx > 1 else 0.0
         dy = height.value() / (ny - 1) if ny > 1 else 0.0
         z  = cz.value()
@@ -739,9 +739,9 @@ class SamplePositionTab(QWidget):
         result = []
         n = 0
         if major.startswith("X"):
-            # X-major: iterate rows (Y outer), columns (X inner), snake X
+            # X-major: row 0 at top-left, scan right (+X), step down (-Y), snake X
             for j in range(ny):
-                y = y0 + j * dy
+                y = y0 - j * dy
                 xs_row = range(nx) if j % 2 == 0 else range(nx - 1, -1, -1)
                 for i in xs_row:
                     x = x0 + i * dx
@@ -751,12 +751,12 @@ class SamplePositionTab(QWidget):
                     ).to_dict())
                     n += 1
         else:
-            # Y-major: iterate columns (X outer), rows (Y inner), snake Y
+            # Y-major: col 0 at top-left, scan down (-Y), step right (+X), snake Y
             for i in range(nx):
                 x = x0 + i * dx
                 ys_col = range(ny) if i % 2 == 0 else range(ny - 1, -1, -1)
                 for j in ys_col:
-                    y = y0 + j * dy
+                    y = y0 - j * dy
                     result.append(PositionRecord(
                         name=f"g{n+1:04d}", x=round(x, 6), y=round(y, 6), z=round(z, 6),
                         role="Sample", layout="grid_scan",
