@@ -55,9 +55,18 @@ except Exception as _epics_err:
 
 # ── Module-level path constants ────────────────────────────────────────────────
 
-_DIR        = os.path.dirname(os.path.abspath(__file__))
-CONFIG_FILE = os.path.join(_DIR, "sample_station_config.json")
-CALIB_FILE  = os.path.join(_DIR, "Data", "camera_calib.txt")
+_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# When run directly (`python sample_station.py`) __file__ is the software dir — use it.
+# When run as a pip entry point (`aswaxs-station`) __file__ is in site-packages and the
+# config will not be there; fall back to the current working directory instead, so the
+# user can cd to the software directory and run `aswaxs-station` from there.
+_script_cfg = os.path.join(_DIR, "sample_station_config.json")
+_cwd_cfg    = os.path.join(os.getcwd(), "sample_station_config.json")
+CONFIG_FILE = _script_cfg if os.path.exists(_script_cfg) else _cwd_cfg
+
+_CONFIG_DIR = os.path.dirname(CONFIG_FILE)
+CALIB_FILE  = os.path.join(_CONFIG_DIR, "Data", "camera_calib.txt")
 
 # ── Local module imports ───────────────────────────────────────────────────────
 
