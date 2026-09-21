@@ -9,15 +9,15 @@ from typing import Any
 # ── Default application configuration ─────────────────────────────────────────
 
 DEFAULT_CONFIG = {
-    "X_MOTOR_PV":       "15IDD:m19",
-    "Y_MOTOR_PV":       "15IDD:m18",
-    "Z_MOTOR_PV":       "15IDD:m7",
+    "X_MOTOR_PV":       "",
+    "Y_MOTOR_PV":       "",
+    "Z_MOTOR_PV":       "",
     "X_MOTOR_NAME":     "s_x",
     "Y_MOTOR_NAME":     "s_y",
     "Z_MOTOR_NAME":     "s_z",
-    "CAMERA_PREFIX":    "Teslong:cam1:",
-    "IMAGE_PREFIX":     "Teslong:image1:",
-    "ROI_PREFIX":       "15PS1:ROI1:",
+    "CAMERA_PREFIX":    "",
+    "IMAGE_PREFIX":     "",
+    "ROI_PREFIX":       "",
     "AUTOFOCUS_STEP":   "0.2",
     "PVA_CHANNEL":      "",
     "PVA_HOST":         "",

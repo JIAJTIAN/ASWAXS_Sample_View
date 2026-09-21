@@ -782,9 +782,13 @@ class SamplePositionTab(QWidget):
         form.addRow(QLabel(""))
 
         snake_combo = QComboBox()
-        snake_combo.addItems(["X-major  (scan rows → step in Y)",
-                              "Y-major  (scan columns ↓ step in X)"])
-        form.addRow("Snake direction:", snake_combo)
+        snake_combo.addItems([
+            "X-major snake  (rows →, alternate direction)",
+            "X-major unidirectional  (rows →, same direction)",
+            "Y-major snake  (columns ↓, alternate direction)",
+            "Y-major unidirectional  (columns ↓, same direction)",
+        ])
+        form.addRow("Scan pattern:", snake_combo)
 
         # live point-count label
         count_lbl = QLabel()
@@ -818,15 +822,16 @@ class SamplePositionTab(QWidget):
         dx = width.value()  / (nx - 1) if nx > 1 else 0.0
         dy = height.value() / (ny - 1) if ny > 1 else 0.0
         z  = cz.value()
-        major = snake_combo.currentText()
+        pattern = snake_combo.currentText()
 
         result = []
         n = 0
-        if major.startswith("X"):
-            # X-major: row 0 at top-left, scan right (+X), step down (+Y), snake X
+        if pattern.startswith("X-major"):
+            snake = "snake" in pattern
             for j in range(ny):
                 y = y0 + j * dy
-                xs_row = range(nx) if j % 2 == 0 else range(nx - 1, -1, -1)
+                xs_row = (range(nx - 1, -1, -1) if (snake and j % 2 == 1)
+                          else range(nx))
                 for i in xs_row:
                     x = x0 + i * dx
                     result.append(PositionRecord(
@@ -835,10 +840,11 @@ class SamplePositionTab(QWidget):
                     ).to_dict())
                     n += 1
         else:
-            # Y-major: col 0 at top-left, scan down (+Y), step right (+X), snake Y
+            snake = "snake" in pattern
             for i in range(nx):
                 x = x0 + i * dx
-                ys_col = range(ny) if i % 2 == 0 else range(ny - 1, -1, -1)
+                ys_col = (range(ny - 1, -1, -1) if (snake and i % 2 == 1)
+                          else range(ny))
                 for j in ys_col:
                     y = y0 + j * dy
                     result.append(PositionRecord(
