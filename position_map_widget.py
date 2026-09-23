@@ -4,15 +4,64 @@
 
 import pyqtgraph as pg
 
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QMenu
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QMenu, QGraphicsRectItem
+from PyQt6.QtCore import Qt, pyqtSignal, QRectF
 from PyQt6.QtGui import QColor
 
 from position_models import ROLE_COLORS
 
 
+class _SelectableViewBox(pg.ViewBox):
+    """ViewBox where left-drag draws a rubber-band selection rect and
+    middle-drag pans (RectMode gives middle-button pan for free)."""
+
+    selectionMade = pyqtSignal(object)   # QRectF in view coords
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setMouseMode(pg.ViewBox.RectMode)  # middle btn → pan
+        self._rb_item  = None
+        self._rb_start = None
+
+    def mouseDragEvent(self, ev, axis=None):
+        if ev.button() != Qt.MouseButton.LeftButton:
+            super().mouseDragEvent(ev, axis)
+            return
+        ev.accept()
+        cur = self.mapToView(ev.pos())
+        if ev.isStart():
+            self._rb_start = self.mapToView(ev.buttonDownPos())
+            self._rb_item  = QGraphicsRectItem()
+            self._rb_item.setPen(pg.mkPen('#3b82f6', width=1,
+                                          style=Qt.PenStyle.DashLine))
+            self._rb_item.setBrush(pg.mkBrush(59, 130, 246, 40))
+            self._rb_item.setZValue(1e9)
+            self.addItem(self._rb_item, ignoreBounds=True)
+
+        if self._rb_start is not None and self._rb_item is not None:
+            x0 = min(self._rb_start.x(), cur.x())
+            y0 = min(self._rb_start.y(), cur.y())
+            x1 = max(self._rb_start.x(), cur.x())
+            y1 = max(self._rb_start.y(), cur.y())
+            self._rb_item.setRect(QRectF(x0, y0, x1 - x0, y1 - y0))
+
+        if ev.isFinish():
+            if self._rb_item is not None:
+                self.removeItem(self._rb_item)
+                self._rb_item = None
+            if self._rb_start is not None:
+                x0 = min(self._rb_start.x(), cur.x())
+                y0 = min(self._rb_start.y(), cur.y())
+                x1 = max(self._rb_start.x(), cur.x())
+                y1 = max(self._rb_start.y(), cur.y())
+                self._rb_start = None
+                if x1 - x0 > 1e-9 or y1 - y0 > 1e-9:
+                    self.selectionMade.emit(QRectF(x0, y0, x1 - x0, y1 - y0))
+
+
 class PositionMapWidget(QWidget):
     pointSelected      = pyqtSignal(int)
+    pointsSelected     = pyqtSignal(list)   # list[int] — rubber-band multi-select
     pointAddRequested  = pyqtSignal(float, float)
     moveRequested      = pyqtSignal(int)   # emitted on right-click → Move to Position
 
@@ -27,12 +76,15 @@ class PositionMapWidget(QWidget):
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
 
-        self.plot = pg.PlotWidget()
+        self._vb = _SelectableViewBox()
+        self._vb.selectionMade.connect(self._on_rect_selected)
+
+        self.plot = pg.PlotWidget(viewBox=self._vb)
         self.plot.setBackground("w")
         self.plot.setLabel("bottom", "x (mm)")
         self.plot.setLabel("left",   "y (mm)")
         self.plot.showGrid(x=True, y=True, alpha=0.22)
-        self.plot.getViewBox().invertY(True)   # +Y goes down, matching stage coordinates
+        self._vb.invertY(True)   # +Y goes down, matching stage coordinates
         self.plot.enableAutoRange(False)
         self.plot.setRange(xRange=[-10, 10], yRange=[-10, 10])
         lay.addWidget(self.plot)
@@ -145,13 +197,24 @@ class PositionMapWidget(QWidget):
         else:
             self.pointSelected.emit(int(idx))
 
+    def _on_rect_selected(self, rect: QRectF):
+        """Find all positions inside the rubber-band rect and emit pointsSelected."""
+        indices = []
+        for i, pos in enumerate(self._positions):
+            x = float(pos.get("x", 0))
+            y = float(pos.get("y", 0))
+            if rect.contains(x, y):
+                indices.append(i)
+        if indices:
+            self.pointsSelected.emit(indices)
+
     def _plot_clicked(self, event):
         if not self._add_points_enabled:
             return
         if event.button() != Qt.MouseButton.LeftButton:
             return
         pos    = event.scenePos()
-        mapped = self.plot.plotItem.vb.mapSceneToView(pos)
+        mapped = self._vb.mapSceneToView(pos)
         self.pointAddRequested.emit(mapped.x(), mapped.y())
 
     def _draw_selection(self):

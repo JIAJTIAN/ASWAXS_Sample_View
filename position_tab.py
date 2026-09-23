@@ -256,6 +256,7 @@ class SamplePositionTab(QWidget):
 
         self.map_widget = PositionMapWidget()
         self.map_widget.pointSelected.connect(self._select_row)
+        self.map_widget.pointsSelected.connect(self._select_rows_from_map)
         self.map_widget.pointAddRequested.connect(self._add_from_map)
         self.map_widget.moveRequested.connect(self._move_to_position)
         splitter.addWidget(self.map_widget)
@@ -451,6 +452,17 @@ class SamplePositionTab(QWidget):
     def _select_row(self, row: int):
         self.table.selectRow(row)
         self.map_widget.set_selected_row(row)
+
+    def _select_rows_from_map(self, rows: list):
+        sm = self.table.selectionModel()
+        sm.clearSelection()
+        for r in rows:
+            idx = self.table.model().index(r, 0)
+            sm.select(idx, QItemSelectionModel.SelectionFlag.Select |
+                          QItemSelectionModel.SelectionFlag.Rows)
+        if rows:
+            self.table.scrollToItem(self.table.item(rows[0], 0))
+            self.map_widget.set_selected_row(rows[0])
 
     def _selected_rows(self) -> list:
         return sorted(set(idx.row() for idx in self.table.selectionModel().selectedRows()))
