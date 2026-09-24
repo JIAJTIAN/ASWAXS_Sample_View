@@ -983,9 +983,14 @@ class SampleStation(QMainWindow):
 
     @pyqtSlot(object)
     def _on_camera_click(self, event):
-        x, y = self.cursor_x, self.cursor_y
+        try:
+            coords = self.image_item.mapFromScene(event.scenePos())
+            x, y = int(coords.x()), int(coords.y())
+        except Exception:
+            return
         if self.image is None:
             return
+        self.cursor_x, self.cursor_y = x, y
 
         if event._double and self.click_move_cb.isChecked():
             if 0 <= x < self.image_width and 0 <= y < self.image_height:
