@@ -13,13 +13,13 @@ from position_models import ROLE_COLORS
 
 class _SelectableViewBox(pg.ViewBox):
     """ViewBox where left-drag draws a rubber-band selection rect and
-    middle-drag pans (RectMode gives middle-button pan for free)."""
+    middle-drag pans; left-drag draws rubber-band selection."""
 
     selectionMade = pyqtSignal(object)   # QRectF in view coords
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.setMouseMode(pg.ViewBox.RectMode)  # middle btn → pan
+        self.setMouseMode(pg.ViewBox.PanMode)  # middle drag → pan via parent
         self._rb_item  = None
         self._rb_start = None
 
