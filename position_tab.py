@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QCheckBox, QFileDialog, QMessageBox, QSplitter, QAbstractItemView,
     QDialog, QDialogButtonBox, QFrame, QTableWidget, QTableWidgetItem,
-    QComboBox, QSpinBox, QDoubleSpinBox, QFormLayout, QMenu,
+    QComboBox, QSpinBox, QDoubleSpinBox, QFormLayout, QMenu, QToolButton,
     QStyledItemDelegate,
 )
 from PyQt6.QtCore import (
@@ -114,33 +114,22 @@ class SamplePositionTab(QWidget):
         top = QHBoxLayout()
         top.setSpacing(4)
 
-        new_btn = QPushButton("New")
-        new_btn.clicked.connect(self._new)
-        top.addWidget(new_btn)
-
-        open_btn = QPushButton("Open…")
-        open_btn.clicked.connect(self._open)
-        top.addWidget(open_btn)
-
-        save_btn = QPushButton("Save")
-        save_btn.clicked.connect(self._save)
-        top.addWidget(save_btn)
-
-        saveas_btn = QPushButton("Save As…")
-        saveas_btn.clicked.connect(self._save_as)
-        top.addWidget(saveas_btn)
-
-        exp_bs_btn = QPushButton("Export Bluesky CSV")
-        exp_bs_btn.clicked.connect(self._export_bluesky)
-        top.addWidget(exp_bs_btn)
-
-        exp_bs_split_btn = QPushButton("Export Bluesky CSV (Split)")
-        exp_bs_split_btn.clicked.connect(self._export_bluesky_split)
-        top.addWidget(exp_bs_split_btn)
-
-        exp_rd_btn = QPushButton("Export Reducer Pairs")
-        exp_rd_btn.clicked.connect(self._export_reducer)
-        top.addWidget(exp_rd_btn)
+        # ── File dropdown ──────────────────────────────────────────────────
+        file_btn = QToolButton()
+        file_btn.setText("File ▾")
+        file_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        file_menu = QMenu(file_btn)
+        file_menu.addAction("New",      self._new)
+        file_menu.addAction("Open…",    self._open)
+        file_menu.addSeparator()
+        file_menu.addAction("Save",     self._save)
+        file_menu.addAction("Save As…", self._save_as)
+        file_menu.addSeparator()
+        file_menu.addAction("Export Bluesky CSV",         self._export_bluesky)
+        file_menu.addAction("Export Bluesky CSV (Split)", self._export_bluesky_split)
+        file_menu.addAction("Export Reducer Pairs",       self._export_reducer)
+        file_btn.setMenu(file_menu)
+        top.addWidget(file_btn)
 
         sep0 = QFrame(); sep0.setFrameShape(QFrame.Shape.VLine)
         sep0.setObjectName("toolSep"); top.addWidget(sep0)
@@ -200,10 +189,6 @@ class SamplePositionTab(QWidget):
         del_btn.setObjectName("redBtn")
         del_btn.clicked.connect(self._delete_selected)
         row_bar.addWidget(del_btn)
-
-        dup_btn = QPushButton("Duplicate")
-        dup_btn.clicked.connect(self._duplicate_selected)
-        row_bar.addWidget(dup_btn)
 
         row_bar.addSpacing(8)
         row_bar.addWidget(QLabel("Selected role:"))
