@@ -130,8 +130,9 @@ class SamplePositionTab(QWidget):
         self._recent_menu = file_menu.addMenu("Open Recent")
         self._refresh_recent_menu()
         file_menu.addSeparator()
-        file_menu.addAction("Save",     self._save)
-        file_menu.addAction("Save As…", self._save_as)
+        file_menu.addAction("Save",                self._save)
+        file_menu.addAction("Save As…",            self._save_as)
+        file_menu.addAction("Save As… (Split CSV)", self._save_as_split)
         file_menu.addSeparator()
         file_menu.addAction("Export Bluesky CSV",         self._export_bluesky)
         file_menu.addAction("Export Bluesky CSV (Split)", self._export_bluesky_split)
@@ -665,6 +666,58 @@ class SamplePositionTab(QWidget):
             return
         try:
             self.save_positions(path)
+        except Exception as e:
+            QMessageBox.critical(self, "Save Error", str(e))
+
+    def _save_as_split(self):
+        positions = self.positions()
+        if not positions:
+            QMessageBox.warning(self, "No Positions", "No positions to save.")
+            return
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Save Split CSV")
+        form = QFormLayout(dlg)
+
+        total_lbl = QLabel(f"Total points: {len(positions)}")
+        form.addRow(total_lbl)
+
+        chunk_spin = QSpinBox()
+        chunk_spin.setRange(10, 10000)
+        chunk_spin.setValue(200)
+        chunk_spin.setSuffix(" pts / file")
+        form.addRow("Points per file:", chunk_spin)
+
+        preview_lbl = QLabel()
+        form.addRow("Files to create:", preview_lbl)
+
+        def _update():
+            import math
+            n = math.ceil(len(positions) / chunk_spin.value())
+            preview_lbl.setText(str(n))
+        chunk_spin.valueChanged.connect(_update)
+        _update()
+
+        bbox = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        bbox.accepted.connect(dlg.accept)
+        bbox.rejected.connect(dlg.reject)
+        form.addRow(bbox)
+
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save Split CSV — choose base filename", "", "CSV (*.csv)")
+        if not path:
+            return
+
+        try:
+            n_files = export_bluesky_csv_split(path, positions, chunk_spin.value())
+            stem = os.path.splitext(os.path.basename(path))[0]
+            QMessageBox.information(self, "Saved",
+                f"Saved {len(positions)} points as {n_files} files:\n"
+                f"{stem}_001.csv … {stem}_{n_files:03d}.csv")
         except Exception as e:
             QMessageBox.critical(self, "Save Error", str(e))
 
