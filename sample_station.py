@@ -94,9 +94,6 @@ class SampleStation(QMainWindow):
 
         # Camera / calibration state
         self.cf            = 0.002450
-        self.roisize       = 60
-        self.x_offset      = 0.0
-        self.y_offset      = 0.0
         self.positions: list[dict] = []
         self.calibration_flag = False
         self.calib_chosen  = 1
@@ -333,39 +330,7 @@ class SampleStation(QMainWindow):
         roi_h = QHBoxLayout(roi_w)
         roi_h.setContentsMargins(0, 0, 0, 0)
         roi_h.setSpacing(4)
-        roi_h.addWidget(QLabel("Calc ROI:"))
-        self.roi_edit = QLineEdit("60")
-        self.roi_edit.setFixedWidth(44)
-        roi_h.addWidget(self.roi_edit)
         grid.addWidget(roi_w, 0, 14)
-
-        # Y row: offset label
-        self.offset_label = QLabel("Offset: X=0.000000, Y=0.000000")
-        self.offset_label.setObjectName("offsetLabel")
-        self.offset_label.setVisible(False)
-        grid.addWidget(self.offset_label, 2, 14)
-
-        # Z row: action buttons
-        btns_w = QWidget()
-        btns_h = QHBoxLayout(btns_w)
-        btns_h.setContentsMargins(0, 0, 0, 0)
-        btns_h.setSpacing(4)
-        self.calc_offset_btn = QPushButton("Calc Offset")
-        self.calc_offset_btn.setObjectName("actionBtn")
-        self.calc_offset_btn.setFixedHeight(26)
-        self.calc_offset_btn.setVisible(False)
-        self.center_x_btn = QPushButton("Cen X")
-        self.center_x_btn.setObjectName("actionBtn")
-        self.center_x_btn.setFixedHeight(26)
-        self.center_x_btn.setVisible(False)
-        self.center_y_btn = QPushButton("Cen Y")
-        self.center_y_btn.setObjectName("actionBtn")
-        self.center_y_btn.setFixedHeight(26)
-        self.center_y_btn.setVisible(False)
-        btns_h.addWidget(self.calc_offset_btn)
-        btns_h.addWidget(self.center_x_btn)
-        btns_h.addWidget(self.center_y_btn)
-        grid.addWidget(btns_w, 4, 14)
 
         outer.addWidget(grid_w)
         return bar
@@ -449,6 +414,31 @@ class SampleStation(QMainWindow):
         toolbar.addStretch()
         v.addLayout(toolbar)
 
+        # ROI control row
+        roi_bar = QHBoxLayout()
+        roi_bar.setSpacing(6)
+        roi_bar.addWidget(QLabel("ROI:"))
+        roi_bar.addWidget(QLabel("X:"))
+        self.roi_x_spin = QSpinBox()
+        self.roi_x_spin.setRange(0, 9999)
+        self.roi_x_spin.setFixedWidth(65)
+        roi_bar.addWidget(self.roi_x_spin)
+        roi_bar.addWidget(QLabel("Y:"))
+        self.roi_y_spin = QSpinBox()
+        self.roi_y_spin.setRange(0, 9999)
+        self.roi_y_spin.setFixedWidth(65)
+        roi_bar.addWidget(self.roi_y_spin)
+        roi_bar.addWidget(QLabel("Size:"))
+        self.roi_size_spin = QSpinBox()
+        self.roi_size_spin.setRange(1, 9999)
+        self.roi_size_spin.setFixedWidth(65)
+        roi_bar.addWidget(self.roi_size_spin)
+        self.roi_center_btn = QPushButton("Center ROI")
+        self.roi_center_btn.setFixedWidth(90)
+        self.roi_center_btn.setToolTip("Move ROI to image center")
+        roi_bar.addWidget(self.roi_center_btn)
+        roi_bar.addStretch()
+        v.addLayout(roi_bar)
 
         # Camera image
         self.gfx = pg.GraphicsLayoutWidget()
@@ -484,10 +474,10 @@ class SampleStation(QMainWindow):
 
     def _connect_signals(self):
         # Motor bar
-        self.calc_offset_btn.clicked.connect(self._calc_offset)
-        self.center_x_btn.clicked.connect(self._center_x)
-        self.center_y_btn.clicked.connect(self._center_y)
-        self.roi_edit.returnPressed.connect(self.roiSizeChanged)
+        self.roi_x_spin.editingFinished.connect(self._on_roi_spin_changed)
+        self.roi_y_spin.editingFinished.connect(self._on_roi_spin_changed)
+        self.roi_size_spin.editingFinished.connect(self._on_roi_spin_changed)
+        self.roi_center_btn.clicked.connect(self._on_roi_center)
 
         # Camera tab
         self.cf_edit.returnPressed.connect(self.cfChanged)
@@ -857,8 +847,14 @@ class SampleStation(QMainWindow):
         sy = v['SizeY']
         self._roi_rect.blockSignals(True)
         self._roi_rect.setPos([v['MinX'], v['MinY']])
-        self._roi_rect.setSize([sx, sy])   # use actual SizeY for height so visual center == ref_y
+        self._roi_rect.setSize([sx, sy])
         self._roi_rect.blockSignals(False)
+        for spin, val in ((self.roi_x_spin, v['MinX']),
+                          (self.roi_y_spin, v['MinY']),
+                          (self.roi_size_spin, sx)):
+            spin.blockSignals(True)
+            spin.setValue(val)
+            spin.blockSignals(False)
 
     @pyqtSlot(object)
     def _on_roi_dragged(self, _roi):
@@ -1140,57 +1136,36 @@ class SampleStation(QMainWindow):
 
     # ── ROI / beam centering ───────────────────────────────────────────────
 
-    def roiSizeChanged(self):
-        try:
-            self.roisize = int(self.roi_edit.text())
-        except ValueError:
-            QMessageBox.warning(self, "Value Error", "Integer only.")
-            self.roi_edit.setText(str(self.roisize))
-
-    def _calc_offset(self):
-        if self.image is None:
-            QMessageBox.warning(self, "No Image", "Camera not streaming.")
+    @pyqtSlot()
+    def _on_roi_spin_changed(self):
+        x = self.roi_x_spin.value()
+        y = self.roi_y_spin.value()
+        s = self.roi_size_spin.value()
+        self._roi_vals.update({'MinX': x, 'MinY': y, 'SizeX': s, 'SizeY': s})
+        self._update_roi_rect()
+        if not EPICS_AVAILABLE:
             return
-        cx, cy, r = self.image_cx, self.image_cy, self.roisize
-        roi1 = self.image[cy - r:cy,       cx - r:cx    ]
-        roi2 = self.image[cy - r:cy,       cx:cx + r    ]
-        roi3 = self.image[cy:cy + r,       cx:cx + r    ]
-        roi4 = self.image[cy:cy + r,       cx - r:cx    ]
-
-        int_max  = max(r_.max() for r_ in (roi1, roi2, roi3, roi4))
-        rois     = [np.abs(r_ - int_max) for r_ in (roi1, roi2, roi3, roi4)]
-        int_max2 = max(r_.max() for r_ in rois)
-        thresh   = 0.1 * int_max2
-
-        s     = [np.sum(r_ > thresh) for r_ in rois]
-        right = int(s[1] + s[2])
-        left  = int(s[0] + s[3])
-        top   = int(s[0] + s[1])
-        bot   = int(s[2] + s[3])
-        total = left + right
-        if total == 0:
+        roi_prefix = self.cfg.get("ROI_PREFIX", "").strip()
+        if not roi_prefix:
             return
-        # Convert pixel imbalance to motor units (mm) using the calibration factor.
-        # ROI spans 2*r pixels = 2*r*cf mm. The imbalance ratio (right-left)/total
-        # is in [-1, 1], so the offset in mm is that ratio × half the ROI width.
-        roi_half_mm = self.roisize * self.cf
-        self.x_offset = (right - left) / total * roi_half_mm
-        self.y_offset = (top   - bot ) / total * roi_half_mm
-        self.offset_label.setText(
-            f"Offset: X={self.x_offset:.4f}, Y={self.y_offset:.4f} mm"
-        )
+        epics.caput(roi_prefix + 'MinX',  x)
+        epics.caput(roi_prefix + 'MinY',  y)
+        epics.caput(roi_prefix + 'SizeX', s)
+        epics.caput(roi_prefix + 'SizeY', s)
 
-    def _center_x(self):
-        self._calc_offset()
-        if abs(self.x_offset) > 0.005:
-            self.x_motor.move_to(self.x_motor.get_sp() - self.x_offset)
-            self._wait_motor_done(self.x_motor, self._calc_offset)
-
-    def _center_y(self):
-        self._calc_offset()
-        if abs(self.y_offset) > 0.005:
-            self.y_motor.move_to(self.y_motor.get_sp() - self.y_offset)
-            self._wait_motor_done(self.y_motor, self._calc_offset)
+    @pyqtSlot()
+    def _on_roi_center(self):
+        sx = self._roi_vals['SizeX']
+        sy = self._roi_vals['SizeY']
+        new_x = max(0, self.image_cx - sx // 2)
+        new_y = max(0, self.image_cy - sy // 2)
+        self._roi_vals.update({'MinX': new_x, 'MinY': new_y, 'SizeX': sx, 'SizeY': sy})
+        self._update_roi_rect()
+        if EPICS_AVAILABLE:
+            roi_prefix = self.cfg.get("ROI_PREFIX", "").strip()
+            if roi_prefix:
+                epics.caput(roi_prefix + 'MinX', new_x)
+                epics.caput(roi_prefix + 'MinY', new_y)
 
     def _wait_motor_done(self, motor, callback=None):
         """Poll motor MOVN every 50 ms via QTimer — no processEvents blocking."""
