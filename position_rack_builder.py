@@ -252,8 +252,7 @@ class RackBuilderDialog(QDialog):
 
     def _blank_position(self, i: int) -> dict:
         return PositionRecord(
-            name=f"rack_{i+1}", x=0.0, y=0.0, z=0.0,
-            role="Sample", layout="rack",
+            x=0.0, y=0.0, z=0.0, role="Sample", layout="rack",
         ).to_dict()
 
     def set_group_count(self, n: int):

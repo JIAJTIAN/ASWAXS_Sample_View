@@ -285,27 +285,47 @@ class SampleStation(QMainWindow):
         outer.setContentsMargins(8, 6, 8, 6)
         outer.setSpacing(0)
 
-        self.x_motor = MotorPanel("X")
-        self.y_motor = MotorPanel("Y")
-        self.z_motor = MotorPanel("Z (Focus)")
+        self.x_motor  = MotorPanel("X")
+        self.y_motor  = MotorPanel("Y")
+        self.z_motor  = MotorPanel("Z (Focus)")
+        self.bx_motor = MotorPanel("Beam X")
+        self.by_motor = MotorPanel("Beam Y")
 
         # Single shared grid — all motor sub-widgets share column definitions
+        # Columns 0-12: X/Y/Z motors; 13: stretch; 14: right-side extras
+        # Column 15: vertical separator; columns 16-28: Beam X/Y; 29: stretch
         grid_w = QWidget()
         grid = QGridLayout(grid_w)
         grid.setContentsMargins(0, 0, 0, 0)
         grid.setHorizontalSpacing(4)
         grid.setVerticalSpacing(0)
-        grid.setColumnStretch(13, 1)   # spacer between motor cols and right extras
+        grid.setColumnStretch(13, 1)   # spacer between sample-motor cols and right extras
+        grid.setColumnStretch(29, 1)   # spacer after beam-motor cols
 
         # Motor rows at grid rows 0, 2, 4; separators at 1, 3
         self.x_motor.place_in_grid(grid, 0)
         self.y_motor.place_in_grid(grid, 2)
         self.z_motor.place_in_grid(grid, 4)
 
+        # Vertical separator between sample motors and beam motors
+        sep_v = QFrame()
+        sep_v.setFrameShape(QFrame.Shape.VLine)
+        sep_v.setObjectName("motorSep")
+        grid.addWidget(sep_v, 0, 15, 5, 1)  # span all 5 rows
+
+        # Beam motors at col_offset=16; rows 0 and 2 (with separator at row 1)
+        self.bx_motor.place_in_grid(grid, 0, col_offset=16)
+        self.by_motor.place_in_grid(grid, 2, col_offset=16)
+
         sep0 = QFrame(); sep0.setFrameShape(QFrame.Shape.HLine); sep0.setObjectName("motorSep")
         sep1 = QFrame(); sep1.setFrameShape(QFrame.Shape.HLine); sep1.setObjectName("motorSep")
+        # HLine separators span sample-motor columns only (0–14); beam motors have their own
         grid.addWidget(sep0, 1, 0, 1, 15)
         grid.addWidget(sep1, 3, 0, 1, 15)
+
+        # Beam-motor HLine separator between Beam X and Beam Y
+        sep_b = QFrame(); sep_b.setFrameShape(QFrame.Shape.HLine); sep_b.setObjectName("motorSep")
+        grid.addWidget(sep_b, 1, 16, 1, 13)
 
         # Right-side extras in column 14
         # X row: ROI
@@ -313,7 +333,7 @@ class SampleStation(QMainWindow):
         roi_h = QHBoxLayout(roi_w)
         roi_h.setContentsMargins(0, 0, 0, 0)
         roi_h.setSpacing(4)
-        roi_h.addWidget(QLabel("ROI:"))
+        roi_h.addWidget(QLabel("Calc ROI:"))
         self.roi_edit = QLineEdit("60")
         self.roi_edit.setFixedWidth(44)
         roi_h.addWidget(self.roi_edit)
@@ -385,22 +405,14 @@ class SampleStation(QMainWindow):
         sep1.setFrameShadow(QFrame.Shadow.Sunken)
         toolbar.addWidget(sep1)
 
-        toolbar.addWidget(QLabel("Focus:"))
+        # Focus section — hidden for now, kept for future use
         self.focus_lbl = QLabel("—")
-        self.focus_lbl.setFixedWidth(75)
         self.focus_lbl.setObjectName("focusLabel")
-        toolbar.addWidget(self.focus_lbl)
         self.autofocus_btn = QPushButton("Autofocus")
-        toolbar.addWidget(self.autofocus_btn)
         self.af_cancel_btn = QPushButton("Cancel AF")
         self.af_cancel_btn.setObjectName("cancelBtn")
-        self.af_cancel_btn.setVisible(False)
-        toolbar.addWidget(self.af_cancel_btn)
-
-        sep2 = QFrame()
-        sep2.setFrameShape(QFrame.Shape.VLine)
-        sep2.setFrameShadow(QFrame.Shadow.Sunken)
-        toolbar.addWidget(sep2)
+        for _fw in (self.focus_lbl, self.autofocus_btn, self.af_cancel_btn):
+            _fw.setVisible(False)
 
         self.cam_start_btn = QPushButton("▶ Start")
         toolbar.addWidget(self.cam_start_btn)
@@ -410,38 +422,33 @@ class SampleStation(QMainWindow):
         self.cam_state_lbl.setObjectName("camStateLabel")
         toolbar.addWidget(self.cam_state_lbl)
 
+        sep2 = QFrame()
+        sep2.setFrameShape(QFrame.Shape.VLine)
+        sep2.setFrameShadow(QFrame.Shadow.Sunken)
+        toolbar.addWidget(sep2)
+
+        toolbar.addWidget(QLabel("Exp (s):"))
+        self.acqtime_edit = QLineEdit()
+        self.acqtime_edit.setFixedWidth(60)
+        self.acqtime_edit.setToolTip("AcquireTime — exposure per frame (s)")
+        toolbar.addWidget(self.acqtime_edit)
+
+        toolbar.addWidget(QLabel("Period (s):"))
+        self.acqperiod_edit = QLineEdit()
+        self.acqperiod_edit.setFixedWidth(60)
+        self.acqperiod_edit.setToolTip("AcquirePeriod — time between frame starts (s)")
+        toolbar.addWidget(self.acqperiod_edit)
+
+        toolbar.addWidget(QLabel("Mode:"))
+        self.imgmode_combo = QComboBox()
+        self.imgmode_combo.addItems(["Single", "Multiple", "Continuous"])
+        self.imgmode_combo.setFixedWidth(100)
+        self.imgmode_combo.setToolTip("ImageMode — detector acquisition mode")
+        toolbar.addWidget(self.imgmode_combo)
+
         toolbar.addStretch()
         v.addLayout(toolbar)
 
-        # ROI control row
-        roi_bar = QHBoxLayout()
-        roi_bar.setSpacing(6)
-        roi_bar.addWidget(QLabel("ROI:"))
-        roi_bar.addWidget(QLabel("X:"))
-        self.roi_x_spin = QSpinBox()
-        self.roi_x_spin.setRange(0, 9999)
-        self.roi_x_spin.setFixedWidth(65)
-        roi_bar.addWidget(self.roi_x_spin)
-        roi_bar.addWidget(QLabel("Y:"))
-        self.roi_y_spin = QSpinBox()
-        self.roi_y_spin.setRange(0, 9999)
-        self.roi_y_spin.setFixedWidth(65)
-        roi_bar.addWidget(self.roi_y_spin)
-        roi_bar.addWidget(QLabel("Size:"))
-        self.roi_size_spin = QSpinBox()
-        self.roi_size_spin.setRange(1, 9999)
-        self.roi_size_spin.setFixedWidth(65)
-        roi_bar.addWidget(self.roi_size_spin)
-        self.roi_lock_btn = QPushButton("Lock ROI")
-        self.roi_lock_btn.setCheckable(True)
-        self.roi_lock_btn.setFixedWidth(85)
-        roi_bar.addWidget(self.roi_lock_btn)
-        self.roi_center_btn = QPushButton("Center ROI")
-        self.roi_center_btn.setFixedWidth(90)
-        self.roi_center_btn.setToolTip("Move ROI to image center")
-        roi_bar.addWidget(self.roi_center_btn)
-        roi_bar.addStretch()
-        v.addLayout(roi_bar)
 
         # Camera image
         self.gfx = pg.GraphicsLayoutWidget()
@@ -490,6 +497,9 @@ class SampleStation(QMainWindow):
         self.af_cancel_btn.clicked.connect(self._cancel_autofocus)
         self.cam_start_btn.clicked.connect(self._start_camera)
         self.cam_stop_btn.clicked.connect(self._stop_camera)
+        self.acqtime_edit.returnPressed.connect(self._send_acqtime)
+        self.acqperiod_edit.returnPressed.connect(self._send_acqperiod)
+        self.imgmode_combo.currentIndexChanged.connect(self._send_imgmode)
 
         # Camera mouse events
         scene = self.view_box.scene()
@@ -508,6 +518,8 @@ class SampleStation(QMainWindow):
         self.x_motor.connect(self.cfg["X_MOTOR_PV"])
         self.y_motor.connect(self.cfg["Y_MOTOR_PV"])
         self.z_motor.connect(self.cfg["Z_MOTOR_PV"])
+        self.bx_motor.connect(self.cfg.get("BX_MOTOR_PV", ""))
+        self.by_motor.connect(self.cfg.get("BY_MOTOR_PV", ""))
         self.pos_tab.set_axis_names(
             self.cfg.get("X_MOTOR_NAME", "s_x"),
             self.cfg.get("Y_MOTOR_NAME", "s_y"),
@@ -522,7 +534,8 @@ class SampleStation(QMainWindow):
         # Stop existing PVA thread if running
         self._stop_pva_thread()
 
-        for attr in ('_img_pv', '_wid_pv', '_hgt_pv', '_state_pv'):
+        for attr in ('_img_pv', '_wid_pv', '_hgt_pv', '_state_pv',
+                     '_acqtime_pv', '_acqperiod_pv', '_imgmode_pv'):
             old = getattr(self, attr, None)
             if old is not None:
                 try:
@@ -598,6 +611,20 @@ class SampleStation(QMainWindow):
             self._cam_conn_timer.setSingleShot(True)
             self._cam_conn_timer.timeout.connect(self._on_cam_conn_timeout)
             self._cam_conn_timer.start(5000)
+
+            # ── Acquisition settings PVs ───────────────────────────────────
+            self._acqtime_bridge   = _PVBridge()
+            self._acqperiod_bridge = _PVBridge()
+            self._imgmode_bridge   = _PVBridge()
+            self._acqtime_bridge.changed.connect(self._on_acqtime)
+            self._acqperiod_bridge.changed.connect(self._on_acqperiod)
+            self._imgmode_bridge.changed.connect(self._on_imgmode)
+            self._acqtime_pv   = PV(cam + "AcquireTime",
+                                    callback=self._acqtime_bridge, auto_monitor=True)
+            self._acqperiod_pv = PV(cam + "AcquirePeriod",
+                                    callback=self._acqperiod_bridge, auto_monitor=True)
+            self._imgmode_pv   = PV(cam + "ImageMode",
+                                    callback=self._imgmode_bridge, auto_monitor=True)
 
         except Exception as e:
             print(f"Camera PV setup error: {e}")
@@ -826,69 +853,16 @@ class SampleStation(QMainWindow):
     def _update_roi_rect(self):
         """Move/resize the RectROI and spinboxes to match _roi_vals (no PV write)."""
         v = self._roi_vals
-        s = v['SizeX']   # canonical square size
+        sx = v['SizeX']
+        sy = v['SizeY']
         self._roi_rect.blockSignals(True)
         self._roi_rect.setPos([v['MinX'], v['MinY']])
-        self._roi_rect.setSize([s, s])
+        self._roi_rect.setSize([sx, sy])   # use actual SizeY for height so visual center == ref_y
         self._roi_rect.blockSignals(False)
-        for spin, val in ((self.roi_x_spin, v['MinX']),
-                          (self.roi_y_spin, v['MinY']),
-                          (self.roi_size_spin, s)):
-            spin.blockSignals(True)
-            spin.setValue(val)
-            spin.blockSignals(False)
-
-    @pyqtSlot()
-    def _on_roi_spin_changed(self):
-        """Slot: user edited a ROI spinbox — write to EPICS."""
-        x = self.roi_x_spin.value()
-        y = self.roi_y_spin.value()
-        s = self.roi_size_spin.value()
-        self._roi_vals.update({'MinX': x, 'MinY': y, 'SizeX': s, 'SizeY': s})
-        self._update_roi_rect()
-        if not EPICS_AVAILABLE:
-            return
-        roi_prefix = self.cfg.get("ROI_PREFIX", "").strip()
-        if not roi_prefix:
-            return
-        epics.caput(roi_prefix + 'MinX',  x)
-        epics.caput(roi_prefix + 'MinY',  y)
-        epics.caput(roi_prefix + 'SizeX', s)
-        epics.caput(roi_prefix + 'SizeY', s)
-
-    @pyqtSlot(bool)
-    def _on_roi_lock_toggled(self, locked: bool):
-        """Slot: Lock ROI button toggled."""
-        self.roi_lock_btn.setText("Locked" if locked else "Lock ROI")
-        pen = pg.mkPen('gray', width=2) if locked else pg.mkPen('y', width=2)
-        self._roi_rect.setPen(pen)
-        self.roi_x_spin.setEnabled(not locked)
-        self.roi_y_spin.setEnabled(not locked)
-        self.roi_size_spin.setEnabled(not locked)
-
-    @pyqtSlot()
-    def _on_roi_center(self):
-        """Slot: Center ROI button — move ROI so its center coincides with image center."""
-        if self.roi_lock_btn.isChecked():
-            return
-        s = self._roi_vals['SizeX']  # current square size
-        # compute MinX/MinY so ROI center = image center
-        new_x = max(0, self.image_cx - s // 2)
-        new_y = max(0, self.image_cy - s // 2)
-        self._roi_vals.update({'MinX': new_x, 'MinY': new_y, 'SizeX': s, 'SizeY': s})
-        self._update_roi_rect()
-        if EPICS_AVAILABLE:
-            roi_prefix = self.cfg.get("ROI_PREFIX", "").strip()
-            if roi_prefix:
-                epics.caput(roi_prefix + 'MinX',  new_x)
-                epics.caput(roi_prefix + 'MinY',  new_y)
 
     @pyqtSlot(object)
     def _on_roi_dragged(self, _roi):
         """Slot: user finished dragging/resizing the ROI — write back to EPICS."""
-        if self.roi_lock_btn.isChecked():
-            self._update_roi_rect()   # snap back to locked position
-            return
         if not EPICS_AVAILABLE:
             return
         roi_prefix = self.cfg.get("ROI_PREFIX", "").strip()
@@ -897,10 +871,9 @@ class SampleStation(QMainWindow):
         pos  = self._roi_rect.pos()
         size = self._roi_rect.size()
         x, y = max(0, int(pos.x())), max(0, int(pos.y()))
-        s = max(1, int(size.x()), int(size.y()))   # square: take larger dimension
-        # Store first so echo-back in _on_roi_pv is recognised and suppressed
+        s = max(1, int(size.x()), int(size.y()))
         self._roi_vals.update({'MinX': x, 'MinY': y, 'SizeX': s, 'SizeY': s})
-        self._update_roi_rect()   # snap to square immediately
+        self._update_roi_rect()
         epics.caput(roi_prefix + 'MinX',  x)
         epics.caput(roi_prefix + 'MinY',  y)
         epics.caput(roi_prefix + 'SizeX', s)
@@ -941,11 +914,6 @@ class SampleStation(QMainWindow):
         self._roi_rect.sigRegionChangeFinished.connect(self._on_roi_dragged)
         self.view_box.addItem(self._roi_rect)
 
-        self.roi_x_spin.editingFinished.connect(self._on_roi_spin_changed)
-        self.roi_y_spin.editingFinished.connect(self._on_roi_spin_changed)
-        self.roi_size_spin.editingFinished.connect(self._on_roi_spin_changed)
-        self.roi_lock_btn.toggled.connect(self._on_roi_lock_toggled)
-        self.roi_center_btn.clicked.connect(self._on_roi_center)
 
     # ── Camera controls ────────────────────────────────────────────────────
 
@@ -956,6 +924,49 @@ class SampleStation(QMainWindow):
     def _stop_camera(self):
         if self._acquire_pv:
             self._acquire_pv.put(0)
+
+    # ── Acquisition settings ───────────────────────────────────────────────
+
+    def _send_acqtime(self):
+        pv = getattr(self, '_acqtime_pv', None)
+        if pv is None:
+            return
+        try:
+            pv.put(float(self.acqtime_edit.text()))
+        except ValueError:
+            pass
+
+    def _send_acqperiod(self):
+        pv = getattr(self, '_acqperiod_pv', None)
+        if pv is None:
+            return
+        try:
+            pv.put(float(self.acqperiod_edit.text()))
+        except ValueError:
+            pass
+
+    def _send_imgmode(self, index: int):
+        pv = getattr(self, '_imgmode_pv', None)
+        if pv is not None:
+            pv.put(index)
+
+    @pyqtSlot(str, object)
+    def _on_acqtime(self, _pvname, value):
+        if not self.acqtime_edit.hasFocus():
+            self.acqtime_edit.setText(f"{float(value):.4g}")
+
+    @pyqtSlot(str, object)
+    def _on_acqperiod(self, _pvname, value):
+        if not self.acqperiod_edit.hasFocus():
+            self.acqperiod_edit.setText(f"{float(value):.4g}")
+
+    @pyqtSlot(str, object)
+    def _on_imgmode(self, _pvname, value):
+        idx = int(value)
+        if 0 <= idx < self.imgmode_combo.count():
+            self.imgmode_combo.blockSignals(True)
+            self.imgmode_combo.setCurrentIndex(idx)
+            self.imgmode_combo.blockSignals(False)
 
     # ── Mouse events ───────────────────────────────────────────────────────
 
@@ -992,16 +1003,30 @@ class SampleStation(QMainWindow):
             return
         self.cursor_x, self.cursor_y = x, y
 
-        if event._double and self.click_move_cb.isChecked():
-            if 0 <= x < self.image_width and 0 <= y < self.image_height:
-                # ROI center = beam position on the detector (top-left corner + half size)
-                v = self._roi_vals
-                ref_x = v['MinX'] + v['SizeX'] / 2  # beam pixel X
-                ref_y = v['MinY'] + v['SizeY'] / 2  # beam pixel Y
-                new_x = self.x_motor.get_sp() + self.cf * (x - ref_x)
-                new_y = self.y_motor.get_sp() + self.cf * (y - ref_y)
-                self.x_motor.move_to(new_x)
-                self.y_motor.move_to(new_y)
+        if 0 <= x < self.image_width and 0 <= y < self.image_height:
+            v = self._roi_vals
+            ref_x = v['MinX'] + v['SizeX'] / 2
+            ref_y = v['MinY'] + v['SizeY'] / 2
+            motor_x = self.x_motor.get_sp() + self.cf * (x - ref_x)
+            motor_y = self.y_motor.get_sp() + self.cf * (y - ref_y)
+
+            if not event._double and self.auto_add_cb.isChecked():
+                # Single click in auto-add mode: record position without moving motors
+                if hasattr(self, 'pos_tab'):
+                    from position_models import PositionRecord
+                    from position_io import normalize_positions
+                    z = self.z_motor.get_sp() if hasattr(self.z_motor, 'get_sp') else 0.0
+                    pos = PositionRecord(x=round(motor_x, 4), y=round(motor_y, 4),
+                                        z=round(z, 4), role="Sample",
+                                        layout="freeform").to_dict()
+                    self.pos_tab._push_undo()
+                    self.pos_tab._positions.append(pos)
+                    self.pos_tab._positions = normalize_positions(self.pos_tab._positions)
+                    self.pos_tab.set_positions(self.pos_tab._positions)
+
+            elif event._double and self.click_move_cb.isChecked():
+                self.x_motor.move_to(motor_x)
+                self.y_motor.move_to(motor_y)
                 if self.auto_add_cb.isChecked():
                     # Wait for both motors then auto-add — non-blocking via QTimer
                     def _check_and_add(xm=self.x_motor, ym=self.y_motor,

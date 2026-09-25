@@ -188,14 +188,7 @@ class PositionMapWidget(QWidget):
         idx = points[0].data()
         if idx is None:
             return
-        # right-click → context menu with Move to Position
-        if ev is not None and ev.button() == Qt.MouseButton.RightButton:
-            menu = QMenu()
-            act = menu.addAction("Move to Position")
-            if menu.exec(ev.screenPos().toPoint()) == act:
-                self.moveRequested.emit(int(idx))
-        else:
-            self.pointSelected.emit(int(idx))
+        self.pointSelected.emit(int(idx))
 
     def _on_rect_selected(self, rect: QRectF):
         """Find all positions inside the rubber-band rect and emit pointsSelected."""
@@ -209,6 +202,9 @@ class PositionMapWidget(QWidget):
             self.pointsSelected.emit(indices)
 
     def _plot_clicked(self, event):
+        if event.button() == Qt.MouseButton.RightButton:
+            self._handle_right_click(event)
+            return
         if not self._add_points_enabled:
             return
         if event.button() != Qt.MouseButton.LeftButton:
@@ -216,6 +212,24 @@ class PositionMapWidget(QWidget):
         pos    = event.scenePos()
         mapped = self._vb.mapSceneToView(pos)
         self.pointAddRequested.emit(mapped.x(), mapped.y())
+
+    def _handle_right_click(self, event):
+        """Right-click on the plot: show context menu if a scatter point is nearby."""
+        scene_pos = event.scenePos()
+        # hit-test every scatter item
+        hit_idx = None
+        for scatter in self._scatter_items:
+            item_pos = scatter.mapFromScene(scene_pos)
+            pts = scatter.pointsAt(item_pos)
+            if pts:
+                hit_idx = pts[0].data()
+                break
+        if hit_idx is None:
+            return
+        menu = QMenu()
+        act = menu.addAction("Move to Position")
+        if menu.exec(event.screenPos().toPoint()) == act:
+            self.moveRequested.emit(int(hit_idx))
 
     def _draw_selection(self):
         if self._selection_item:

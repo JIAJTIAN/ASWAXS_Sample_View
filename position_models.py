@@ -12,6 +12,8 @@ DEFAULT_CONFIG = {
     "X_MOTOR_PV":       "",
     "Y_MOTOR_PV":       "",
     "Z_MOTOR_PV":       "",
+    "BX_MOTOR_PV":      "",
+    "BY_MOTOR_PV":      "",
     "X_MOTOR_NAME":     "s_x",
     "Y_MOTOR_NAME":     "s_y",
     "Z_MOTOR_NAME":     "s_z",
@@ -91,8 +93,7 @@ class PositionRecord:
         normalized = {f: data.get(f, "") for f in POSITION_FIELDS}
         for f in NUMERIC_FIELDS:
             normalized[f] = _flt(normalized.get(f))
-        if not str(normalized["name"]).strip():
-            normalized["name"] = f"pos_{index+1}" if index is not None else "pos"
+        # leave name empty — display index (#) is shown in the table instead
         for f in ("role", "layout"):
             if not str(normalized[f]).strip():
                 normalized[f] = DEFAULT_ROLE if f == "role" else DEFAULT_LAYOUT

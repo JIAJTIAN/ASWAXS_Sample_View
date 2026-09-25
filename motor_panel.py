@@ -103,22 +103,23 @@ class MotorPanel(QObject):
         self.stop_btn.setToolTip("Stop motor")
         self.stop_btn.clicked.connect(self._stop_motor)
 
-    def place_in_grid(self, grid, row: int):
+    def place_in_grid(self, grid, row: int, col_offset: int = 0):
         """Place all sub-widgets into an external QGridLayout at the given row."""
         A = Qt.AlignmentFlag
-        grid.addWidget(self.axis_lbl,  row, 0, A.AlignCenter)
-        grid.addWidget(self.desc_lbl,  row, 1)
-        grid.addWidget(self.rbv_tag,   row, 2, A.AlignRight | A.AlignVCenter)
-        grid.addWidget(self.rbv_lbl,   row, 3)
-        grid.addWidget(self.egu_lbl,   row, 4, A.AlignLeft | A.AlignVCenter)
-        grid.addWidget(self.sp_tag,    row, 5, A.AlignRight | A.AlignVCenter)
-        grid.addWidget(self.sp_edit,   row, 6)
-        grid.addWidget(self.movn_lbl,  row, 7, A.AlignCenter)
-        grid.addWidget(self.step_tag,  row, 8, A.AlignRight | A.AlignVCenter)
-        grid.addWidget(self.step_edit, row, 9)
-        grid.addWidget(self.rev_btn,   row, 10)
-        grid.addWidget(self.fwd_btn,   row, 11)
-        grid.addWidget(self.stop_btn,  row, 12)
+        c = col_offset
+        grid.addWidget(self.axis_lbl,  row, c+0,  A.AlignCenter)
+        grid.addWidget(self.desc_lbl,  row, c+1)
+        grid.addWidget(self.rbv_tag,   row, c+2,  A.AlignRight | A.AlignVCenter)
+        grid.addWidget(self.rbv_lbl,   row, c+3)
+        grid.addWidget(self.egu_lbl,   row, c+4,  A.AlignLeft | A.AlignVCenter)
+        grid.addWidget(self.sp_tag,    row, c+5,  A.AlignRight | A.AlignVCenter)
+        grid.addWidget(self.sp_edit,   row, c+6)
+        grid.addWidget(self.movn_lbl,  row, c+7,  A.AlignCenter)
+        grid.addWidget(self.step_tag,  row, c+8,  A.AlignRight | A.AlignVCenter)
+        grid.addWidget(self.step_edit, row, c+9)
+        grid.addWidget(self.rev_btn,   row, c+10)
+        grid.addWidget(self.fwd_btn,   row, c+11)
+        grid.addWidget(self.stop_btn,  row, c+12)
 
     # ── public API ─────────────────────────────────────────────────────────
 

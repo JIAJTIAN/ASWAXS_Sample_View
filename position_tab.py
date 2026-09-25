@@ -4,11 +4,12 @@
 
 import os
 import copy
+import json
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QCheckBox, QFileDialog, QMessageBox, QSplitter, QAbstractItemView,
-    QDialog, QDialogButtonBox, QFrame, QTableWidget, QTableWidgetItem,
+    QDialog, QDialogButtonBox, QFrame, QHeaderView, QTableWidget, QTableWidgetItem,
     QComboBox, QSpinBox, QDoubleSpinBox, QFormLayout, QMenu, QToolButton,
     QStyledItemDelegate,
 )
@@ -19,7 +20,8 @@ from PyQt6.QtGui import QKeySequence, QShortcut
 
 from position_models import POSITION_FIELDS, NUMERIC_FIELDS, ROLE_PRESETS, PositionRecord
 
-_ROLE_COL = POSITION_FIELDS.index("role")
+_IDX_COL  = 0                                   # read-only "#" sequence column
+_ROLE_COL = POSITION_FIELDS.index("role") + 1  # shifted by the leading "#" column
 _UNDO_LIMIT_LARGE = 5   # shallow undo history when list is large
 _LARGE_THRESHOLD  = 1000
 
@@ -50,6 +52,8 @@ from position_rack_builder import RackBuilderDialog
 from spline_interpolator import catmull_rom_resample
 
 _DIR = os.path.dirname(os.path.abspath(__file__))
+_RECENT_FILE = os.path.join(_DIR, "recent_positions.json")
+_RECENT_MAX  = 8
 
 
 class SamplePositionTab(QWidget):
@@ -66,6 +70,7 @@ class SamplePositionTab(QWidget):
         self._redo_stack: list  = []
         self._drag_source_row: int = -1  # row captured on mouse-press for manual drag
         self._axis_names: dict = {"x": "x", "y": "y", "z": "z"}  # display names for x/y/z cols
+        self._recent_files: list[str] = self._load_recent_files()
         self._build_ui()
         self._setup_undo_shortcuts()
         self.set_positions([])  # start empty; use Templates menu or Capture to add positions
@@ -119,8 +124,11 @@ class SamplePositionTab(QWidget):
         file_btn.setText("File ▾")
         file_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         file_menu = QMenu(file_btn)
+        self._file_menu = file_menu
         file_menu.addAction("New",      self._new)
         file_menu.addAction("Open…",    self._open)
+        self._recent_menu = file_menu.addMenu("Open Recent")
+        self._refresh_recent_menu()
         file_menu.addSeparator()
         file_menu.addAction("Save",     self._save)
         file_menu.addAction("Save As…", self._save_as)
@@ -219,8 +227,8 @@ class SamplePositionTab(QWidget):
         # ── Splitter: table | map ───────────────────────────────────────
         splitter = QSplitter(Qt.Orientation.Horizontal)
 
-        self.table = QTableWidget(0, len(POSITION_FIELDS))
-        self.table.setHorizontalHeaderLabels(POSITION_FIELDS)
+        self.table = QTableWidget(0, 1 + len(POSITION_FIELDS))
+        self.table.setHorizontalHeaderLabels(["#"] + list(POSITION_FIELDS))
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.table.setAlternatingRowColors(True)
@@ -232,6 +240,8 @@ class SamplePositionTab(QWidget):
         self.table.setDropIndicatorShown(True)
         self.table.setDragDropOverwriteMode(False)
         self.table.viewport().installEventFilter(self)  # captures source row + handles Drop
+        self.table.setColumnWidth(_IDX_COL, 36)
+        self.table.horizontalHeader().setSectionResizeMode(_IDX_COL, QHeaderView.ResizeMode.Fixed)
         self.table.setItemDelegateForColumn(_ROLE_COL, _RoleDelegate(self.table))
         self.table.itemChanged.connect(self._item_changed)
         self.table.selectionModel().selectionChanged.connect(self._selection_changed)
@@ -255,7 +265,7 @@ class SamplePositionTab(QWidget):
     def set_axis_names(self, x_name: str, y_name: str, z_name: str):
         """Update display names for x/y/z columns (e.g. 's_x', 's_y', 's_z')."""
         self._axis_names = {"x": x_name, "y": y_name, "z": z_name}
-        labels = [self._axis_names.get(f, f) for f in POSITION_FIELDS]
+        labels = ["#"] + [self._axis_names.get(f, f) for f in POSITION_FIELDS]
         self.table.setHorizontalHeaderLabels(labels)
 
     def positions(self) -> list:
@@ -273,11 +283,72 @@ class SamplePositionTab(QWidget):
         from pathlib import Path
         self.set_positions(load_positions(path))
         self._current_path = Path(path)
+        self._add_recent(str(path))
 
     def save_positions(self, path):
         from pathlib import Path
         save_positions(path, self.positions(), axis_names=self._axis_names)
         self._current_path = Path(path)
+        self._add_recent(str(path))
+
+    # ── Recent files ───────────────────────────────────────────────────────
+
+    def _load_recent_files(self) -> list[str]:
+        try:
+            with open(_RECENT_FILE) as f:
+                data = json.load(f)
+            return [p for p in data if os.path.exists(p)][:_RECENT_MAX]
+        except Exception:
+            return []
+
+    def _save_recent_files(self):
+        try:
+            with open(_RECENT_FILE, 'w') as f:
+                json.dump(self._recent_files, f, indent=2)
+        except Exception:
+            pass
+
+    def _add_recent(self, path: str):
+        path = os.path.abspath(path)
+        if path in self._recent_files:
+            self._recent_files.remove(path)
+        self._recent_files.insert(0, path)
+        self._recent_files = self._recent_files[:_RECENT_MAX]
+        self._save_recent_files()
+        self._refresh_recent_menu()
+
+    def _refresh_recent_menu(self):
+        self._recent_menu.clear()
+        if not self._recent_files:
+            self._recent_menu.addAction("(none)").setEnabled(False)
+            return
+        for path in self._recent_files:
+            label = os.path.basename(path)
+            act = self._recent_menu.addAction(label)
+            act.setToolTip(path)
+            act.setData(path)
+            act.triggered.connect(lambda checked, p=path: self._open_recent(p))
+        self._recent_menu.addSeparator()
+        self._recent_menu.addAction("Clear Recent", self._clear_recent)
+
+    def _open_recent(self, path: str):
+        if not os.path.exists(path):
+            QMessageBox.warning(self, "File Not Found", f"File no longer exists:\n{path}")
+            self._recent_files = [p for p in self._recent_files if p != path]
+            self._save_recent_files()
+            self._refresh_recent_menu()
+            return
+        if not self._confirm_replace():
+            return
+        try:
+            self.load_positions(path)
+        except Exception as e:
+            QMessageBox.critical(self, "Load Error", str(e))
+
+    def _clear_recent(self):
+        self._recent_files.clear()
+        self._save_recent_files()
+        self._refresh_recent_menu()
 
     # ── Capture from stage ─────────────────────────────────────────────────
 
@@ -296,8 +367,7 @@ class SamplePositionTab(QWidget):
         rows = self._selected_rows()
         idx  = rows[-1] + 1 if rows else len(self._positions)
         self._positions.insert(idx, PositionRecord(
-            name=f"pos_{idx+1}", x=x, y=y, z=z,
-            role="Sample", layout="freeform",
+            x=x, y=y, z=z, role="Sample", layout="freeform",
         ).to_dict())
         self._positions = normalize_positions(self._positions)
         self.set_positions(self._positions)
@@ -342,11 +412,10 @@ class SamplePositionTab(QWidget):
             return
         interp = [
             PositionRecord(
-                name=f"interp_{i+1}",
                 x=float(r.get("x", 0)), y=float(r.get("y", 0)), z=float(r.get("z", 0)),
                 role="Interpolated", layout="blender_interpolated",
             ).to_dict()
-            for i, r in enumerate(result)
+            for r in result
         ]
         new = (self._positions + interp) if reply == QMessageBox.StandardButton.Yes else interp
         self.set_positions(new)
@@ -358,9 +427,15 @@ class SamplePositionTab(QWidget):
         self.table.setUpdatesEnabled(False)
         self.table.setRowCount(len(self._positions))
         for r, pos in enumerate(self._positions):
+            # Column 0: read-only sequence number
+            idx_item = QTableWidgetItem(str(r + 1))
+            idx_item.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable)
+            idx_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            self.table.setItem(r, 0, idx_item)
+            # Columns 1+: position fields
             for c, field in enumerate(POSITION_FIELDS):
                 item = QTableWidgetItem(str(pos.get(field, "")))
-                self.table.setItem(r, c, item)
+                self.table.setItem(r, c + 1, item)
         self.table.setUpdatesEnabled(True)
         self._updating = False
 
@@ -401,9 +476,11 @@ class SamplePositionTab(QWidget):
             return
         row   = item.row()
         col   = item.column()
+        if col == _IDX_COL:      # read-only sequence column — ignore
+            return
         if row >= len(self._positions):
             return
-        field = POSITION_FIELDS[col]
+        field = POSITION_FIELDS[col - 1]  # offset by leading "#" column
         val   = item.text()
         if field == "role":
             # Apply to all selected rows when multiple are highlighted
@@ -470,7 +547,6 @@ class SamplePositionTab(QWidget):
         rows = self._selected_rows()
         idx  = rows[-1] + 1 if rows else len(self._positions)
         self._positions.insert(idx, blank_position(idx))
-        # renumber names
         self._positions = normalize_positions(self._positions)
         self.set_positions(self._positions)
         self._select_row(idx)
@@ -481,8 +557,7 @@ class SamplePositionTab(QWidget):
         z    = float(self._positions[rows[0]].get("z", 0)) if rows else 0.0
         idx  = len(self._positions)
         self._positions.append(PositionRecord(
-            name=f"pos_{idx+1}", x=x, y=y, z=z,
-            role="Sample", layout="freeform",
+            x=x, y=y, z=z, role="Sample", layout="freeform",
         ).to_dict())
         self.set_positions(self._positions)
         self._select_row(idx)
@@ -740,8 +815,7 @@ class SamplePositionTab(QWidget):
             x = sx + (i * spacing if axis == "x" else 0.0)
             y = sy + (i * spacing if axis == "y" else 0.0)
             result.append(PositionRecord(
-                name=f"cap_{i+1}", x=x, y=y, z=sz,
-                role="Sample", layout="capillary_linear",
+                x=x, y=y, z=sz, role="Sample", layout="capillary_linear",
             ).to_dict())
         return result
 
@@ -832,7 +906,7 @@ class SamplePositionTab(QWidget):
                 for i in xs_row:
                     x = x0 + i * dx
                     result.append(PositionRecord(
-                        name=f"g{n+1:04d}", x=round(x, 6), y=round(y, 6), z=round(z, 6),
+                        x=round(x, 6), y=round(y, 6), z=round(z, 6),
                         role="Sample", layout="grid_scan",
                     ).to_dict())
                     n += 1
@@ -845,7 +919,7 @@ class SamplePositionTab(QWidget):
                 for j in ys_col:
                     y = y0 + j * dy
                     result.append(PositionRecord(
-                        name=f"g{n+1:04d}", x=round(x, 6), y=round(y, 6), z=round(z, 6),
+                        x=round(x, 6), y=round(y, 6), z=round(z, 6),
                         role="Sample", layout="grid_scan",
                     ).to_dict())
                     n += 1

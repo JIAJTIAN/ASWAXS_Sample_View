@@ -25,7 +25,7 @@ def normalize_positions(rows: list) -> list:
 
 
 def blank_position(index: int = 0, *, layout: str = DEFAULT_LAYOUT) -> dict:
-    return PositionRecord(name=f"pos_{index+1}", layout=layout).to_dict()
+    return PositionRecord(layout=layout).to_dict()
 
 
 def _canonical_field(v: str) -> str:
