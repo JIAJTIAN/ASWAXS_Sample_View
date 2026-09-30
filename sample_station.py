@@ -413,6 +413,27 @@ class SampleStation(QMainWindow):
         self.imgmode_combo.setToolTip("ImageMode — detector acquisition mode")
         toolbar.addWidget(self.imgmode_combo)
 
+        toolbar.addWidget(QLabel("Gain:"))
+        self.gain_edit = QLineEdit()
+        self.gain_edit.setFixedWidth(60)
+        self.gain_edit.setToolTip("Gain — detector gain (15PS1:cam1:Gain)")
+        toolbar.addWidget(self.gain_edit)
+
+        sep3 = QFrame()
+        sep3.setFrameShape(QFrame.Shape.VLine)
+        sep3.setFrameShadow(QFrame.Shadow.Sunken)
+        toolbar.addWidget(sep3)
+
+        self.auto_adjust_cb = QCheckBox("Auto Adjust")
+        self.auto_adjust_cb.setChecked(False)
+        self.auto_adjust_cb.setToolTip("Auto-scale display levels on every frame")
+        toolbar.addWidget(self.auto_adjust_cb)
+
+        self.histogram_cb = QCheckBox("Histogram")
+        self.histogram_cb.setChecked(True)
+        self.histogram_cb.toggled.connect(lambda v: self.hist_widget.setVisible(v))
+        toolbar.addWidget(self.histogram_cb)
+
         toolbar.addStretch()
         v.addLayout(toolbar)
 
@@ -442,14 +463,24 @@ class SampleStation(QMainWindow):
         roi_bar.addStretch()
         v.addLayout(roi_bar)
 
-        # Camera image
+        # Camera image + histogram
         self.gfx = pg.GraphicsLayoutWidget()
         self.view_box = self.gfx.addViewBox(row=0, col=0)
         self.view_box.setAspectLocked(True)
         self.view_box.invertY(True)
         self.image_item = pg.ImageItem()
         self.view_box.addItem(self.image_item)
-        v.addWidget(self.gfx, stretch=1)
+
+        self.hist_widget = pg.HistogramLUTWidget()
+        self.hist_widget.setImageItem(self.image_item)
+        self.hist_widget.setFixedWidth(130)
+
+        cam_split = QSplitter(Qt.Orientation.Horizontal)
+        cam_split.addWidget(self.gfx)
+        cam_split.addWidget(self.hist_widget)
+        cam_split.setStretchFactor(0, 1)
+        cam_split.setStretchFactor(1, 0)
+        v.addWidget(cam_split, stretch=1)
 
         # Bottom status bar
         status = QHBoxLayout()
@@ -492,6 +523,7 @@ class SampleStation(QMainWindow):
         self.acqtime_edit.returnPressed.connect(self._send_acqtime)
         self.acqperiod_edit.returnPressed.connect(self._send_acqperiod)
         self.imgmode_combo.currentIndexChanged.connect(self._send_imgmode)
+        self.gain_edit.returnPressed.connect(self._send_gain)
 
         # Camera mouse events
         scene = self.view_box.scene()
@@ -527,7 +559,7 @@ class SampleStation(QMainWindow):
         self._stop_pva_thread()
 
         for attr in ('_img_pv', '_wid_pv', '_hgt_pv', '_state_pv',
-                     '_acqtime_pv', '_acqperiod_pv', '_imgmode_pv'):
+                     '_acqtime_pv', '_acqperiod_pv', '_imgmode_pv', '_gain_pv'):
             old = getattr(self, attr, None)
             if old is not None:
                 try:
@@ -617,6 +649,10 @@ class SampleStation(QMainWindow):
                                     callback=self._acqperiod_bridge, auto_monitor=True)
             self._imgmode_pv   = PV(cam + "ImageMode",
                                     callback=self._imgmode_bridge, auto_monitor=True)
+            self._gain_bridge  = _PVBridge()
+            self._gain_bridge.changed.connect(self._on_gain)
+            self._gain_pv      = PV(cam + "Gain",
+                                    callback=self._gain_bridge, auto_monitor=True)
 
         except Exception as e:
             print(f"Camera PV setup error: {e}")
@@ -720,7 +756,9 @@ class SampleStation(QMainWindow):
             h, w = gray.shape
             self.image        = gray
             self.image_height = h
-            self.image_item.setImage(gray, autoLevels=False, levels=(0, 255))
+            auto = self.auto_adjust_cb.isChecked()
+            self.image_item.setImage(gray, autoLevels=auto,
+                                     levels=None if auto else (0, 255))
             if not self._center_initialized:
                 self.view_box.autoRange()
                 self.image_cx = w // 2
@@ -764,7 +802,9 @@ class SampleStation(QMainWindow):
             self.image        = gray
             self.image_width  = w
             self.image_height = h
-            self.image_item.setImage(gray, autoLevels=False, levels=(0, 255))
+            auto = self.auto_adjust_cb.isChecked()
+            self.image_item.setImage(gray, autoLevels=auto,
+                                     levels=None if auto else (0, 255))
             if not self._center_initialized:
                 self.view_box.autoRange()
                 self.image_cx = w // 2
@@ -965,6 +1005,20 @@ class SampleStation(QMainWindow):
             self.imgmode_combo.blockSignals(True)
             self.imgmode_combo.setCurrentIndex(idx)
             self.imgmode_combo.blockSignals(False)
+
+    def _send_gain(self):
+        pv = getattr(self, '_gain_pv', None)
+        if pv is None:
+            return
+        try:
+            pv.put(float(self.gain_edit.text()))
+        except ValueError:
+            pass
+
+    @pyqtSlot(str, object)
+    def _on_gain(self, _pvname, value):
+        if not self.gain_edit.hasFocus():
+            self.gain_edit.setText(f"{float(value):.4g}")
 
     # ── Mouse events ───────────────────────────────────────────────────────
 
