@@ -95,6 +95,7 @@ class SampleStation(QMainWindow):
         # Camera / calibration state
         self._pending_add_timer: QTimer | None = None
         self._pending_add_coords: tuple | None = None
+        self._pending_add_idx: int = -1
         self.cf            = 0.002450
         self.positions: list[dict] = []
         self.calibration_flag = False
@@ -1220,13 +1221,19 @@ class SampleStation(QMainWindow):
             motor_y = self.y_motor.get_sp() + self.cf * (y - ref_y)
 
             if not event._double and self.auto_add_cb.isChecked():
-                # Defer the add by one double-click interval so a following
-                # double-click can cancel it before it fires.
+                # Capture insertion point NOW (before selection can change).
+                # Defer the actual insert by one double-click interval so a
+                # following double-click cancels it instead of adding a phantom.
                 if self._pending_add_timer is not None:
                     self._pending_add_timer.stop()
                     self._pending_add_timer = None
                 z = self.z_motor.get_sp() if hasattr(self.z_motor, 'get_sp') else 0.0
                 self._pending_add_coords = (round(motor_x, 4), round(motor_y, 4), round(z, 4))
+                if hasattr(self, 'pos_tab'):
+                    rows = self.pos_tab._selected_rows()
+                    self._pending_add_idx = rows[-1] + 1 if rows else len(self.pos_tab._positions)
+                else:
+                    self._pending_add_idx = 0
                 t = QTimer(self)
                 t.setSingleShot(True)
                 t.setInterval(QApplication.doubleClickInterval())
@@ -1288,16 +1295,18 @@ class SampleStation(QMainWindow):
         """Called by the debounce timer — actually insert the deferred position."""
         self._pending_add_timer = None
         coords = self._pending_add_coords
+        idx    = self._pending_add_idx
         self._pending_add_coords = None
+        self._pending_add_idx    = -1
         if coords is None or not hasattr(self, 'pos_tab'):
             return
         mx, my, mz = coords
+        # Clamp idx in case positions were deleted between click and timer fire
+        idx = min(idx, len(self.pos_tab._positions))
         from position_models import PositionRecord
         from position_io import normalize_positions
         pos = PositionRecord(x=mx, y=my, z=mz, role="Sample", layout="freeform").to_dict()
         self.pos_tab._push_undo()
-        rows = self.pos_tab._selected_rows()
-        idx = rows[-1] + 1 if rows else len(self.pos_tab._positions)
         self.pos_tab._positions.insert(idx, pos)
         self.pos_tab._positions = normalize_positions(self.pos_tab._positions)
         self.pos_tab._refresh_table()
