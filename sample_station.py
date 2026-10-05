@@ -1087,20 +1087,15 @@ class SampleStation(QMainWindow):
                     self.pos_tab._push_undo()
                     self.pos_tab._positions.append(pos)
                     self.pos_tab._positions = normalize_positions(self.pos_tab._positions)
-                    self.pos_tab.set_positions(self.pos_tab._positions)
+                    idx = len(self.pos_tab._positions) - 1
+                    self.pos_tab._refresh_table()
+                    self.pos_tab.map_widget.set_positions(self.pos_tab._positions)
+                    self.pos_tab.positionsChanged.emit(self.pos_tab.positions())
+                    self.pos_tab._select_row(idx)
 
             elif event._double and self.click_move_cb.isChecked():
                 self.x_motor.move_to(motor_x)
                 self.y_motor.move_to(motor_y)
-                if self.auto_add_cb.isChecked():
-                    # Wait for both motors then auto-add — non-blocking via QTimer
-                    def _check_and_add(xm=self.x_motor, ym=self.y_motor,
-                                       t=QTimer(self), add=self.addPosition):
-                        if not xm.is_moving() and not ym.is_moving():
-                            t.stop(); t.deleteLater(); add()
-                    _t = QTimer(self); _t.setInterval(50)
-                    _t.timeout.connect(lambda: _check_and_add(t=_t))
-                    _t.start()
 
         if self.select_beam_cb.isChecked():
             self.beam_x, self.beam_y = x, y
