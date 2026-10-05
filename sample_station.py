@@ -236,9 +236,7 @@ class SampleStation(QMainWindow):
         hm.addAction("About",               self._show_about)
 
     def _open_calib_dialog(self):
-        dlg = _CalibDialog(self.cf, self)
-        if dlg.exec() == QDialog.DialogCode.Accepted:
-            self.cf = dlg.factor()
+        self.openCalibration()
             if hasattr(self, 'cf_edit'):
                 self.cf_edit.setText(f"{self.cf:.6f}")
 
@@ -1055,6 +1053,23 @@ class SampleStation(QMainWindow):
             return
         self.cursor_x, self.cursor_y = x, y
 
+        # Calibration mode takes priority — consume the click and return early
+        if self.calibration_flag:
+            if self.calib_chosen == 1:
+                self.pos1 = [x, y]
+                self.calib_pos[0] = [x, y]
+                if hasattr(self, '_calib_dialog'):
+                    self._calib_dialog.first_lbl.setText(f"x: {x}, y: {y}")
+            else:
+                self.pos2 = [x, y]
+                self.calib_pos[1] = [x, y]
+                if hasattr(self, '_calib_dialog'):
+                    self._calib_dialog.second_lbl.setText(f"x: {x}, y: {y}")
+            self._calib_pts.setData(
+                pos=self.calib_pos, size=10, symbol='o', pen=pg.mkPen('red')
+            )
+            return
+
         if 0 <= x < self.image_width and 0 <= y < self.image_height:
             v = self._roi_vals
             ref_x = v['MinX'] + v['SizeX'] / 2
@@ -1088,21 +1103,6 @@ class SampleStation(QMainWindow):
                     _t = QTimer(self); _t.setInterval(50)
                     _t.timeout.connect(lambda: _check_and_add(t=_t))
                     _t.start()
-
-        elif self.calibration_flag:
-            if self.calib_chosen == 1:
-                self.pos1 = [x, y]
-                self.calib_pos[0] = [x, y]
-                if hasattr(self, '_calib_dialog'):
-                    self._calib_dialog.first_lbl.setText(f"x: {x}, y: {y}")
-            else:
-                self.pos2 = [x, y]
-                self.calib_pos[1] = [x, y]
-                if hasattr(self, '_calib_dialog'):
-                    self._calib_dialog.second_lbl.setText(f"x: {x}, y: {y}")
-            self._calib_pts.setData(
-                pos=self.calib_pos, size=10, symbol='o', pen=pg.mkPen('red')
-            )
 
         if self.select_beam_cb.isChecked():
             self.beam_x, self.beam_y = x, y
@@ -1154,6 +1154,7 @@ class SampleStation(QMainWindow):
         ]
         self.calibration_flag = True
         self.calib_chosen = 1
+        self._calib_pts.setData(pos=self.calib_pos, size=10, symbol='o', pen=pg.mkPen('red'))
         self._calib_pts.show()
 
         dlg = _CalibDialog(self)
