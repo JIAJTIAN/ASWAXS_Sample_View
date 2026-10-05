@@ -6,7 +6,7 @@ import pyqtgraph as pg
 
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QMenu, QGraphicsRectItem
 from PyQt6.QtCore import Qt, pyqtSignal, QRectF
-from PyQt6.QtGui import QColor
+from PyQt6.QtGui import QColor, QKeyEvent
 
 from position_models import ROLE_COLORS
 
@@ -64,6 +64,7 @@ class PositionMapWidget(QWidget):
     pointsSelected     = pyqtSignal(list)   # list[int] — rubber-band multi-select
     pointAddRequested  = pyqtSignal(float, float)
     moveRequested      = pyqtSignal(int)   # emitted on right-click → Move to Position
+    deleteRequested    = pyqtSignal()       # Delete key pressed while map has focus
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -81,6 +82,8 @@ class PositionMapWidget(QWidget):
         self._vb.selectionMade.connect(self._on_rect_selected)
 
         self.plot = pg.PlotWidget(viewBox=self._vb)
+        self.plot.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
+        self.plot.installEventFilter(self)
         self.plot.setBackground("w")
         self.plot.setLabel("bottom", "x (mm)")
         self.plot.setLabel("left",   "y (mm)")
@@ -237,6 +240,15 @@ class PositionMapWidget(QWidget):
         act = menu.addAction("Move to Position")
         if menu.exec(event.screenPos().toPoint()) == act:
             self.moveRequested.emit(int(hit_idx))
+
+    def eventFilter(self, watched, event):
+        if watched is self.plot and isinstance(event, QKeyEvent):
+            if event.type() == QKeyEvent.Type.KeyPress and event.key() in (
+                Qt.Key.Key_Delete, Qt.Key.Key_Backspace
+            ):
+                self.deleteRequested.emit()
+                return True
+        return super().eventFilter(watched, event)
 
     def _draw_selection(self):
         if self._selection_item:

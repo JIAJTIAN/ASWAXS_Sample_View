@@ -255,6 +255,7 @@ class SamplePositionTab(QWidget):
         self.map_widget.pointsSelected.connect(self._select_rows_from_map)
         self.map_widget.pointAddRequested.connect(self._add_from_map)
         self.map_widget.moveRequested.connect(self._move_to_position)
+        self.map_widget.deleteRequested.connect(self._delete_selected)
         splitter.addWidget(self.map_widget)
 
         splitter.setStretchFactor(0, 1)
