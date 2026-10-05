@@ -508,8 +508,7 @@ class SamplePositionTab(QWidget):
 
     def _selection_changed(self):
         rows = self._selected_rows()
-        if rows:
-            self.map_widget.set_selected_row(rows[0])
+        self.map_widget.set_selected_rows(rows)
         self._pending_role_rows = rows
 
     def _select_row(self, row: int):
@@ -525,7 +524,7 @@ class SamplePositionTab(QWidget):
                           QItemSelectionModel.SelectionFlag.Rows)
         if rows:
             self.table.scrollToItem(self.table.item(rows[0], 0))
-            self.map_widget.set_selected_row(rows[0])
+            self.map_widget.set_selected_rows(rows)
 
     def _selected_rows(self) -> list:
         return sorted(set(idx.row() for idx in self.table.selectionModel().selectedRows()))
@@ -609,12 +608,22 @@ class SamplePositionTab(QWidget):
         rows = self._selected_rows()
         if not rows:
             return
-        row = rows[0]
-        new = row + delta
-        if 0 <= new < len(self._positions):
-            self._positions.insert(new, self._positions.pop(row))
-            self.set_positions(self._positions)
-            self._select_row(new)
+        if delta > 0:
+            boundary = max(rows) + 1
+            if boundary >= len(self._positions):
+                return
+            # Shift item just below the block to just above it
+            self._positions.insert(min(rows), self._positions.pop(boundary))
+            new_rows = [r + 1 for r in rows]
+        else:
+            boundary = min(rows) - 1
+            if boundary < 0:
+                return
+            # Shift item just above the block to just below it
+            self._positions.insert(max(rows), self._positions.pop(boundary))
+            new_rows = [r - 1 for r in rows]
+        self.set_positions(self._positions)
+        self._restore_selection(new_rows, new_rows[0])
 
     def _on_rows_moved(self, _src_parent, src_start: int, src_end: int,
                        _dst_parent, dst_row: int):

@@ -69,6 +69,7 @@ class PositionMapWidget(QWidget):
         super().__init__(parent)
         self._positions        = []
         self._selected_row     = -1
+        self._selected_rows: list = []
         self._show_arrows      = False
         self._show_names       = True
         self._add_points_enabled = False
@@ -102,6 +103,12 @@ class PositionMapWidget(QWidget):
 
     def set_selected_row(self, row: int):
         self._selected_row = row
+        self._selected_rows = [row] if row >= 0 else []
+        self._draw_selection()
+
+    def set_selected_rows(self, rows: list):
+        self._selected_rows = list(rows)
+        self._selected_row = rows[0] if rows else -1
         self._draw_selection()
 
     def set_sequence_arrows_visible(self, v: bool):
@@ -238,13 +245,13 @@ class PositionMapWidget(QWidget):
             except Exception:
                 pass
             self._selection_item = None
-        if self._selected_row < 0 or self._selected_row >= len(self._positions):
+        valid = [r for r in self._selected_rows if 0 <= r < len(self._positions)]
+        if not valid:
             return
-        pos = self._positions[self._selected_row]
-        x   = float(pos.get("x", 0))
-        y   = float(pos.get("y", 0))
+        xs = [float(self._positions[r].get("x", 0)) for r in valid]
+        ys = [float(self._positions[r].get("y", 0)) for r in valid]
         self._selection_item = pg.ScatterPlotItem(
-            x=[x], y=[y],
+            x=xs, y=ys,
             size=22,
             brush=pg.mkBrush(None),
             pen=pg.mkPen("#1e3a5f", width=2),
