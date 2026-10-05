@@ -169,6 +169,8 @@ class SampleStation(QMainWindow):
         self.tabs = QTabWidget()
         self.tabs.addTab(self._build_camera_tab(),    "Camera")
         self.tabs.addTab(self._build_positions_tab(), "Sample Positions")
+        self.tabs.addTab(self._build_combined_tab(),  "Combined View")
+        self.tabs.currentChanged.connect(self._on_tab_changed)
         v.addWidget(self.tabs, 1)
         self._build_menu_bar()
         self._connect_signals()
@@ -495,7 +497,143 @@ class SampleStation(QMainWindow):
 
     def _build_positions_tab(self) -> QWidget:
         self.pos_tab = SamplePositionTab(station=self)
+        self.pos_tab.positionsChanged.connect(self._update_combined_overlay)
         return self.pos_tab
+
+    def _build_combined_tab(self) -> QWidget:
+        w = QWidget()
+        v = QVBoxLayout(w)
+        v.setContentsMargins(4, 4, 4, 4)
+
+        # Toolbar
+        bar = QHBoxLayout()
+        bar.addWidget(QLabel("Combined View — camera image with position overlay"))
+        bar.addStretch()
+        self._combined_show_labels_cb = QCheckBox("Labels")
+        self._combined_show_labels_cb.setChecked(True)
+        self._combined_show_labels_cb.toggled.connect(self._update_combined_overlay)
+        bar.addWidget(self._combined_show_labels_cb)
+        self._combined_show_sequence_cb = QCheckBox("Sequence")
+        self._combined_show_sequence_cb.setChecked(True)
+        self._combined_show_sequence_cb.toggled.connect(self._update_combined_overlay)
+        bar.addWidget(self._combined_show_sequence_cb)
+        v.addLayout(bar)
+
+        # Image view — separate ViewBox so it doesn't share state with the Camera tab
+        self._comb_gfx = pg.GraphicsLayoutWidget()
+        self._comb_vb  = self._comb_gfx.addViewBox(row=0, col=0)
+        self._comb_vb.setAspectLocked(True)
+        self._comb_vb.invertY(True)
+        self._comb_image = pg.ImageItem()
+        self._comb_vb.addItem(self._comb_image)
+
+        # Overlay items (created once, updated in _update_combined_overlay)
+        self._comb_scatter   = pg.ScatterPlotItem()
+        self._comb_selection = pg.ScatterPlotItem()
+        self._comb_seq_outer = pg.PlotCurveItem(pen=pg.mkPen("#93c5fd", width=4))
+        self._comb_seq_inner = pg.PlotCurveItem(pen=pg.mkPen("#3b82f6", width=1.5))
+        self._comb_labels    = []   # pg.TextItem list, rebuilt on update
+        for item in (self._comb_seq_outer, self._comb_seq_inner,
+                     self._comb_scatter, self._comb_selection):
+            self._comb_vb.addItem(item)
+
+        v.addWidget(self._comb_gfx, stretch=1)
+        return w
+
+    def _on_tab_changed(self, idx: int):
+        # Refresh combined view whenever the user switches to it
+        if self.tabs.tabText(idx) == "Combined View":
+            self._update_combined_overlay()
+
+    def _update_combined_overlay(self, _=None):
+        """Repaint the combined-view tab: copy latest frame + draw position overlay."""
+        # Copy latest frame into the combined image item
+        if self.image is not None:
+            self._comb_image.setImage(self.image, autoLevels=False,
+                                      levels=(0, 255))
+            self._comb_vb.setRange(
+                xRange=(0, self.image_width),
+                yRange=(0, self.image_height),
+                padding=0,
+            )
+
+        # Remove old text labels
+        for lbl in self._comb_labels:
+            try:
+                self._comb_vb.removeItem(lbl)
+            except Exception:
+                pass
+        self._comb_labels = []
+
+        positions = getattr(self, 'pos_tab', None)
+        if positions is None:
+            return
+        positions = self.pos_tab._positions
+        if not positions or self.cf <= 0:
+            self._comb_scatter.setData([], [])
+            self._comb_selection.setData([], [])
+            self._comb_seq_outer.setData([], [])
+            self._comb_seq_inner.setData([], [])
+            return
+
+        v       = self._roi_vals
+        ref_x   = v['MinX'] + v['SizeX'] / 2
+        ref_y   = v['MinY'] + v['SizeY'] / 2
+        mx_sp   = self.x_motor.get_sp()
+        my_sp   = self.y_motor.get_sp()
+
+        from position_models import ROLE_COLORS
+        from PyQt6.QtGui import QColor as _QC
+
+        spots = []
+        px_xs, px_ys = [], []
+        for i, pos in enumerate(positions):
+            px = ref_x + (float(pos.get("x", 0)) - mx_sp) / self.cf
+            py = ref_y + (float(pos.get("y", 0)) - my_sp) / self.cf
+            px_xs.append(px)
+            px_ys.append(py)
+            role   = str(pos.get("role", "Sample") or "Sample")
+            hex_c  = ROLE_COLORS.get(role, "#888888")
+            qc     = _QC(hex_c)
+            spots.append({
+                'pos': (px, py), 'size': 10,
+                'brush': pg.mkBrush(qc),
+                'pen':   pg.mkPen(qc.darker(150), width=1),
+                'data':  i,
+            })
+
+        self._comb_scatter.setData(spots)
+
+        # Selected point highlight
+        sel_rows = self.pos_tab._selected_rows
+        if sel_rows:
+            sxs = [px_xs[r] for r in sel_rows if 0 <= r < len(px_xs)]
+            sys_ = [px_ys[r] for r in sel_rows if 0 <= r < len(px_ys)]
+            self._comb_selection.setData(
+                x=sxs, y=sys_, size=20,
+                brush=pg.mkBrush(None),
+                pen=pg.mkPen("#1e3a5f", width=2), symbol='o',
+            )
+        else:
+            self._comb_selection.setData([], [])
+
+        # Sequence line
+        if self._combined_show_sequence_cb.isChecked() and len(px_xs) > 1:
+            self._comb_seq_outer.setData(px_xs, px_ys)
+            self._comb_seq_inner.setData(px_xs, px_ys)
+        else:
+            self._comb_seq_outer.setData([], [])
+            self._comb_seq_inner.setData([], [])
+
+        # Labels
+        if self._combined_show_labels_cb.isChecked():
+            for i, pos in enumerate(positions):
+                name = str(pos.get("name", "")).strip()
+                tag  = name if name else str(i + 1)
+                lbl = pg.TextItem(tag, color="#ffffff", anchor=(0, 1))
+                lbl.setPos(px_xs[i], px_ys[i])
+                self._comb_vb.addItem(lbl)
+                self._comb_labels.append(lbl)
 
     # _build_setup_tab removed — setup is now SetupDialog (see dialogs.py)
 
@@ -767,6 +905,8 @@ class SampleStation(QMainWindow):
                 self.focus_lbl.setText(f"{fp:.3f}")
             else:
                 self.focus_lbl.setText("(cv2 N/A)")
+            if self.tabs.currentWidget() is self.tabs.widget(2):
+                self._update_combined_overlay()
         except Exception as e:
             print(f"[camera] {e}")
 
@@ -813,6 +953,8 @@ class SampleStation(QMainWindow):
                 self.focus_lbl.setText(f"{fp:.3f}")
             else:
                 self.focus_lbl.setText("(cv2 N/A)")
+            if self.tabs.currentWidget() is self.tabs.widget(2):
+                self._update_combined_overlay()
         except Exception as e:
             print(f"[pva frame] {e}")
 
