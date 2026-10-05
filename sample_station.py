@@ -237,8 +237,6 @@ class SampleStation(QMainWindow):
 
     def _open_calib_dialog(self):
         self.openCalibration()
-            if hasattr(self, 'cf_edit'):
-                self.cf_edit.setText(f"{self.cf:.6f}")
 
     def _open_setup_dialog(self, focus_group: str | None = None):
         dlg = SetupDialog(self.cfg, self)
