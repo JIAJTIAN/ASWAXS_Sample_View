@@ -404,13 +404,13 @@ class SamplePositionTab(QWidget):
         reply = QMessageBox.question(
             self, "Interpolation Result",
             f"Generated {len(result)} interpolated points.\n"
-            "Yes = Append to existing  |  No = Replace",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No |
-            QMessageBox.StandardButton.Cancel,
-            QMessageBox.StandardButton.Yes,
+            "Replace the current list?",
+            QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Ok,
         )
-        if reply == QMessageBox.StandardButton.Cancel:
+        if reply != QMessageBox.StandardButton.Ok:
             return
+        self._push_undo()
         interp = [
             PositionRecord(
                 x=float(r.get("x", 0)), y=float(r.get("y", 0)), z=float(r.get("z", 0)),
@@ -418,8 +418,7 @@ class SamplePositionTab(QWidget):
             ).to_dict()
             for r in result
         ]
-        new = (self._positions + interp) if reply == QMessageBox.StandardButton.Yes else interp
-        self.set_positions(new)
+        self.set_positions(interp)
 
     # ── Table management ───────────────────────────────────────────────────
 
