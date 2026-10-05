@@ -83,7 +83,8 @@ class PositionMapWidget(QWidget):
 
         self.plot = pg.PlotWidget(viewBox=self._vb)
         self.plot.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
-        self.plot.installEventFilter(self)
+        self.plot.viewport().setFocusPolicy(Qt.FocusPolicy.ClickFocus)
+        self.plot.viewport().installEventFilter(self)
         self.plot.setBackground("w")
         self.plot.setLabel("bottom", "x (mm)")
         self.plot.setLabel("left",   "y (mm)")
@@ -242,7 +243,7 @@ class PositionMapWidget(QWidget):
             self.moveRequested.emit(int(hit_idx))
 
     def eventFilter(self, watched, event):
-        if watched is self.plot and isinstance(event, QKeyEvent):
+        if watched is self.plot.viewport():
             if event.type() == QKeyEvent.Type.KeyPress and event.key() in (
                 Qt.Key.Key_Delete, Qt.Key.Key_Backspace
             ):

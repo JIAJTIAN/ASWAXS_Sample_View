@@ -441,7 +441,7 @@ class SamplePositionTab(QWidget):
         self._updating = False
 
     def eventFilter(self, watched, event):
-        if watched is self.table:
+        if watched in (self.table, self.table.viewport()):
             if event.type() == QEvent.Type.KeyPress:
                 if event.key() == Qt.Key.Key_Delete:
                     self._delete_selected()
