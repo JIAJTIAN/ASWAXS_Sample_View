@@ -190,7 +190,7 @@ class PositionMapWidget(QWidget):
         self.plot.autoRange(padding=0.15)
 
     def _scatter_clicked(self, _scatter, points, ev=None):
-        if not points:
+        if len(points) == 0:
             return
         idx = points[0].data()
         if idx is None:
@@ -228,7 +228,7 @@ class PositionMapWidget(QWidget):
         for scatter in self._scatter_items:
             item_pos = scatter.mapFromScene(scene_pos)
             pts = scatter.pointsAt(item_pos)
-            if pts:
+            if len(pts) > 0:
                 hit_idx = pts[0].data()
                 break
         if hit_idx is None:
