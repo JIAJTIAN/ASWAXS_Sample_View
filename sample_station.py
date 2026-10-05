@@ -1085,9 +1085,10 @@ class SampleStation(QMainWindow):
                                         z=round(z, 4), role="Sample",
                                         layout="freeform").to_dict()
                     self.pos_tab._push_undo()
-                    self.pos_tab._positions.append(pos)
+                    rows = self.pos_tab._selected_rows()
+                    idx = rows[-1] + 1 if rows else len(self.pos_tab._positions)
+                    self.pos_tab._positions.insert(idx, pos)
                     self.pos_tab._positions = normalize_positions(self.pos_tab._positions)
-                    idx = len(self.pos_tab._positions) - 1
                     self.pos_tab._refresh_table()
                     self.pos_tab.map_widget.set_positions(self.pos_tab._positions)
                     self.pos_tab.positionsChanged.emit(self.pos_tab.positions())
