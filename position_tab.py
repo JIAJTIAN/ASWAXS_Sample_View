@@ -585,10 +585,18 @@ class SamplePositionTab(QWidget):
     def _delete_selected(self):
         self._push_undo()
         rows = sorted(self._selected_rows(), reverse=True)
+        if not rows:
+            return
+        target = min(rows)  # row to land on after deletion
         for r in rows:
             if 0 <= r < len(self._positions):
                 self._positions.pop(r)
-        self.set_positions(self._positions)
+        self._positions = normalize_positions(self._positions)
+        self._refresh_table()
+        self.map_widget.set_positions(self._positions)
+        self.positionsChanged.emit(self.positions())
+        if self._positions:
+            self._select_row(min(target, len(self._positions) - 1))
 
     def _duplicate_selected(self):
         self._push_undo()
